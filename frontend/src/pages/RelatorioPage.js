@@ -1,6 +1,7 @@
 // frontend/src/pages/RelatorioPage.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { Title, Table, Paper, Loader, Alert } from "@mantine/core";
 
 function RelatorioPage() {
   const [relatorioData, setRelatorioData] = useState({});
@@ -18,25 +19,17 @@ function RelatorioPage() {
           }
         );
 
-        // Processa e agrupa os dados recebidos por mês
         const groupedData = response.data.reduce((acc, servico) => {
           const data = new Date(servico.data_hora_inicio);
-          // Cria uma chave "Mês de Ano" (ex: "Setembro de 2025")
           const monthYear = data.toLocaleString("pt-BR", {
             month: "long",
             year: "numeric",
           });
-
           if (!acc[monthYear]) {
-            acc[monthYear] = {
-              servicos: [],
-              total: 0,
-            };
+            acc[monthYear] = { servicos: [], total: 0 };
           }
-
           acc[monthYear].servicos.push(servico);
           acc[monthYear].total += parseFloat(servico.preco);
-
           return acc;
         }, {});
 
@@ -47,56 +40,64 @@ function RelatorioPage() {
         setLoading(false);
       }
     };
-
     fetchRelatorio();
   }, []);
 
-  if (loading) return <p>Gerando relatório...</p>;
-  if (error) return <p style={{ color: "red" }}>{error}</p>;
+  if (loading) return <Loader />;
+  if (error)
+    return (
+      <Alert color="red" title="Erro">
+        {error}
+      </Alert>
+    );
 
   return (
     <div>
-      <h2>Relatório de Serviços Realizados</h2>
+      <Title order={2}>Relatório Financeiro</Title>
+      <p>
+        Aqui estão todos os serviços marcados como "concluído", agrupados por
+        mês.
+      </p>
 
       {Object.keys(relatorioData).length > 0 ? (
         Object.keys(relatorioData).map((mes) => (
-          <div key={mes} style={{ marginBottom: "30px" }}>
-            <h3>{mes.charAt(0).toUpperCase() + mes.slice(1)}</h3>
-            <table
-              border="1"
-              cellPadding="5"
-              style={{ width: "100%", borderCollapse: "collapse" }}
-            >
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Cliente</th>
-                  <th>Serviço</th>
-                  <th>Valor (R$)</th>
-                </tr>
-              </thead>
-              <tbody>
+          <Paper withBorder shadow="sm" p="lg" mt="xl" radius="md" key={mes}>
+            <Title order={4}>
+              {mes.charAt(0).toUpperCase() + mes.slice(1)}
+            </Title>
+            <Table striped withTableBorder withColumnBorders mt="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Data</Table.Th>
+                  <Table.Th>Cliente</Table.Th>
+                  <Table.Th>Serviço</Table.Th>
+                  <Table.Th>Valor (R$)</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
                 {relatorioData[mes].servicos.map((servico) => (
-                  <tr key={servico.id}>
-                    <td>
+                  <Table.Tr key={servico.id}>
+                    <Table.Td>
                       {new Date(servico.data_hora_inicio).toLocaleDateString(
                         "pt-BR"
                       )}
-                    </td>
-                    <td>{servico.nome_cliente}</td>
-                    <td>{servico.nome_servico}</td>
-                    <td>{parseFloat(servico.preco).toFixed(2)}</td>
-                  </tr>
+                    </Table.Td>
+                    <Table.Td>{servico.nome_cliente}</Table.Td>
+                    <Table.Td>{servico.nome_servico}</Table.Td>
+                    <Table.Td>{parseFloat(servico.preco).toFixed(2)}</Table.Td>
+                  </Table.Tr>
                 ))}
-              </tbody>
-            </table>
-            <p style={{ textAlign: "right", fontWeight: "bold" }}>
+              </Table.Tbody>
+            </Table>
+            <Title order={5} mt="md" style={{ textAlign: "right" }}>
               Total do Mês: R$ {relatorioData[mes].total.toFixed(2)}
-            </p>
-          </div>
+            </Title>
+          </Paper>
         ))
       ) : (
-        <p>Nenhum serviço concluído encontrado para gerar o relatório.</p>
+        <Paper withBorder p="lg" mt="md">
+          <p>Nenhum serviço concluído encontrado para gerar o relatório.</p>
+        </Paper>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Importação de todas as páginas e componentes necessários
+// Importação de todas as páginas e componentes
 import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import AgendaPage from "./pages/AgendaPage";
 import RelatorioPage from "./pages/RelatorioPage";
@@ -19,7 +20,8 @@ function App() {
           {/* === Rotas Públicas === */}
           {/* O usuário não precisa estar logado para ver estas páginas */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/agendar/:profissionalId" element={<BookingPage />} />
+          <Route path="/cadastro" element={<RegisterPage />} />
+          <Route path="/agendar" element={<BookingPage />} />
 
           {/* Rota raiz: por padrão, leva para o login */}
           <Route path="/" element={<Navigate to="/login" />} />

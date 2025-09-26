@@ -1,5 +1,16 @@
+// frontend/src/components/CreateServiceForm.js
 import React, { useState } from "react";
 import axios from "axios";
+import {
+  TextInput,
+  NumberInput,
+  Button,
+  Paper,
+  Title,
+  Group,
+  Alert,
+} from "@mantine/core";
+import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
 
 const CreateServiceForm = ({ onServiceCreated }) => {
   const [nome, setNome] = useState("");
@@ -7,11 +18,14 @@ const CreateServiceForm = ({ onServiceCreated }) => {
   const [preco, setPreco] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setLoading(true);
+
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
@@ -25,6 +39,7 @@ const CreateServiceForm = ({ onServiceCreated }) => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
+
       setNome("");
       setDuracao("");
       setPreco("");
@@ -32,48 +47,65 @@ const CreateServiceForm = ({ onServiceCreated }) => {
       onServiceCreated(response.data);
     } catch (err) {
       setError("Erro ao cadastrar serviço. Verifique os dados.");
-      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ marginTop: "20px", border: "1px solid #ccc", padding: "15px" }}
-    >
-      <h3>Cadastrar Novo Serviço</h3>
-      <div>
-        <label>Nome do Serviço:</label>
-        <input
-          type="text"
+    <Paper withBorder shadow="sm" p="lg" mt="md" radius="md">
+      <Title order={4}>Cadastrar Novo Serviço</Title>
+      <form onSubmit={handleSubmit} style={{ marginTop: "20px" }}>
+        <TextInput
+          label="Nome do Serviço"
+          placeholder="Ex: Corte Masculino"
           value={nome}
-          onChange={(e) => setNome(e.target.value)}
+          onChange={(e) => setNome(e.currentTarget.value)}
           required
         />
-      </div>
-      <div>
-        <label>Duração (minutos):</label>
-        <input
-          type="number"
+        <NumberInput
+          label="Duração (minutos)"
+          placeholder="Ex: 30"
           value={duracao}
-          onChange={(e) => setDuracao(e.target.value)}
+          onChange={setDuracao}
           required
+          mt="md"
         />
-      </div>
-      <div>
-        <label>Preço (R$):</label>
-        <input
-          type="number"
-          step="0.01"
+        <NumberInput
+          label="Preço (R$)"
+          placeholder="Ex: 50.00"
           value={preco}
-          onChange={(e) => setPreco(e.target.value)}
+          onChange={setPreco}
+          precision={2}
+          step={0.5}
           required
+          mt="md"
         />
-      </div>
-      <button type="submit">Cadastrar Serviço</button>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      {success && <p style={{ color: "green" }}>{success}</p>}
-    </form>
+        <Button type="submit" mt="lg" loading={loading}>
+          Cadastrar Serviço
+        </Button>
+        {error && (
+          <Alert
+            icon={<IconAlertCircle size={16} />}
+            title="Erro"
+            color="red"
+            mt="md"
+          >
+            {error}
+          </Alert>
+        )}
+        {success && (
+          <Alert
+            icon={<IconCheck size={16} />}
+            title="Sucesso"
+            color="green"
+            mt="md"
+          >
+            {success}
+          </Alert>
+        )}
+      </form>
+    </Paper>
   );
 };
 

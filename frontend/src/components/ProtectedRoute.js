@@ -1,7 +1,7 @@
 // frontend/src/components/ProtectedRoute.js
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
-import Header from "./Header"; // Importe o Header
+import { Navigate } from "react-router-dom";
+import AppLayout from "./AppLayout"; // Importa o novo Layout
 
 const ProtectedRoute = () => {
   const token = localStorage.getItem("token");
@@ -10,15 +10,9 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" />;
   }
 
-  // Renderiza o Header e em seguida o conteúdo da página protegida
-  return (
-    <div>
-      <Header />
-      <main style={{ padding: "20px" }}>
-        <Outlet />
-      </main>
-    </div>
-  );
+  // Se o usuário está logado, renderiza o AppLayout.
+  // O AppLayout, por sua vez, vai renderizar a página correta através do <Outlet/>.
+  return <AppLayout />;
 };
 
 export default ProtectedRoute;

@@ -13,6 +13,34 @@ app.use(express.json());
 
 // --- ROTAS PÚBLICAS (PARA A PÁGINA DE AGENDAMENTO DO CLIENTE) ---
 
+// ROTA PARA LISTAR TODAS AS FILIAIS
+app.get("/publico/filiais", async (req, res) => {
+  try {
+    const result = await db.query(
+      "SELECT id, nome_filial FROM Filial ORDER BY nome_filial"
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
+
+// ROTA PARA LISTAR OS PROFISSIONAIS DE UMA FILIAL
+app.get("/publico/profissionais/:filialId", async (req, res) => {
+  try {
+    const { filialId } = req.params;
+    const result = await db.query(
+      "SELECT id, nome FROM Profissional WHERE filial_id = $1 ORDER BY nome",
+      [filialId]
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
+
+// --- ROTAS PÚBLICAS (PARA A PÁGINA DE AGENDAMENTO DO CLIENTE) ---
+
 // ROTA PÚBLICA PARA BUSCAR OS SERVIÇOS DE UM PROFISSIONAL
 app.get("/publico/servicos/:profissionalId", async (req, res) => {
   try {
@@ -313,24 +341,44 @@ app.get("/relatorios/servicos-realizados", authMiddleware, async (req, res) => {
 // --- ROTAS DE AGENDAMENTOS (PROTEGIDAS) ---
 
 // ROTA PARA LISTAR AGENDAMENTOS DE UM PROFISSIONAL
+// ROTA PARA LISTAR AGENDAMENTOS DE UM PROFISSIONAL
 app.get("/agendamentos", authMiddleware, async (req, res) => {
   try {
     const { id: profissional_id } = req.profissional;
+    const { data } = req.query; // Adicionamos a capacidade de filtrar por data
 
-    const queryText = `
-            SELECT 
-                a.id, a.data_hora_inicio, a.data_hora_fim, a.status,
-                c.nome_cliente,
-                s.nome_servico
-            FROM Agendamento a
-            JOIN Cliente c ON a.cliente_id = c.id
-            JOIN Servico s ON a.servico_id = s.id
-            WHERE a.profissional_id = $1
-            ORDER BY a.data_hora_inicio ASC;
-        `;
+    let agendamentosResult;
 
-    const result = await db.query(queryText, [profissional_id]);
-    res.status(200).json(result.rows);
+    // Se uma data for fornecida, filtramos. Senão, buscamos todos.
+    if (data) {
+      const queryText = `SELECT data_hora_inicio, data_hora_fim FROM Agendamento WHERE profissional_id = $1 AND data_hora_inicio::date = $2`;
+      agendamentosResult = await db.query(queryText, [profissional_id, data]);
+    } else {
+      const queryText = `
+                SELECT a.id, a.data_hora_inicio, a.data_hora_fim, a.status, c.nome_cliente, s.nome_servico
+                FROM Agendamento a
+                JOIN Cliente c ON a.cliente_id = c.id
+                JOIN Servico s ON a.servico_id = s.id
+                WHERE a.profissional_id = $1
+                ORDER BY a.data_hora_inicio ASC;
+            `;
+      agendamentosResult = await db.query(queryText, [profissional_id]);
+    }
+
+    // Sempre buscamos o horário de trabalho do profissional
+    const profissionalQuery =
+      "SELECT config_horarios FROM Profissional WHERE id = $1";
+    const profissionalResult = await db.query(profissionalQuery, [
+      profissional_id,
+    ]);
+
+    res.status(200).json({
+      agendamentos: agendamentosResult.rows,
+      horarioTrabalho:
+        profissionalResult.rows.length > 0
+          ? profissionalResult.rows[0].config_horarios
+          : null,
+    });
   } catch (error) {
     console.error("Erro ao listar agendamentos:", error);
     res.status(500).json({ message: "Erro interno do servidor." });

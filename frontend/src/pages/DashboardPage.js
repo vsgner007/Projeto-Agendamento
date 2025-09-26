@@ -1,56 +1,41 @@
+// frontend/src/pages/DashboardPage.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { Title, Table, Button, Group, Loader, Alert } from "@mantine/core";
 import CreateServiceForm from "../components/CreateServiceForm";
 import EditServiceModal from "../components/EditServiceModal";
 
 function DashboardPage() {
-  // --- ESTADOS DO COMPONENTE ---
-  const [servicos, setServicos] = useState([]); // Guarda a lista de serviços
-  const [loading, setLoading] = useState(true); // Controla a mensagem de "Carregando..."
-  const [error, setError] = useState(""); // Guarda mensagens de erro
-  const [editingService, setEditingService] = useState(null); // Controla o modal de edição
+  const [servicos, setServicos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editingService, setEditingService] = useState(null);
 
-  // --- BUSCA INICIAL DE DADOS ---
   useEffect(() => {
-    const fetchServicos = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("Nenhum token encontrado. Faça login novamente.");
-          setLoading(false);
-          return;
-        }
-        const response = await axios.get("http://localhost:3001/servicos", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setServicos(response.data);
-      } catch (err) {
-        setError("Não foi possível carregar os serviços.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchServicos();
-  }, []); // O array vazio [] garante que isso só roda uma vez
+  }, []);
 
-  // --- FUNÇÕES DE MANIPULAÇÃO DE DADOS ---
+  const fetchServicos = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get("http://localhost:3001/servicos", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setServicos(response.data);
+    } catch (err) {
+      setError("Não foi possível carregar os serviços.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Chamada pelo CreateServiceForm após sucesso
   const handleServiceCreated = (novoServico) => {
-    setError(""); // Limpa erros antigos
     setServicos([novoServico, ...servicos]);
   };
 
-  // Chamada pelo botão de deletar
   const handleDeleteService = async (servicoId) => {
-    const confirmDelete = window.confirm(
-      "Você tem certeza que deseja deletar este serviço?"
-    );
-    if (!confirmDelete) return;
-
+    if (!window.confirm("Tem certeza que deseja deletar este serviço?")) return;
     try {
-      setError("");
       const token = localStorage.getItem("token");
       await axios.delete(`http://localhost:3001/servicos/${servicoId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -58,13 +43,10 @@ function DashboardPage() {
       setServicos(servicos.filter((servico) => servico.id !== servicoId));
     } catch (err) {
       setError("Erro ao deletar o serviço.");
-      console.error("Erro ao deletar:", err);
     }
   };
 
-  // Chamada pelo EditServiceModal após sucesso na atualização
   const handleServiceUpdated = (servicoAtualizado) => {
-    setError("");
     setServicos(
       servicos.map((s) =>
         s.id === servicoAtualizado.id ? servicoAtualizado : s
@@ -72,57 +54,66 @@ function DashboardPage() {
     );
   };
 
-  // Funções para controlar o modal de edição
-  const handleEditClick = (servico) => setEditingService(servico);
-  const handleCloseModal = () => setEditingService(null);
+  if (loading) return <Loader />;
+  if (error)
+    return (
+      <Alert color="red" title="Erro">
+        {error}
+      </Alert>
+    );
 
-  // --- RENDERIZAÇÃO ---
-
-  if (loading) return <p>Carregando serviços...</p>;
+  const rows = servicos.map((servico) => (
+    <Table.Tr key={servico.id}>
+      <Table.Td>{servico.nome_servico}</Table.Td>
+      <Table.Td>{servico.duracao_minutos} min</Table.Td>
+      <Table.Td>R$ {parseFloat(servico.preco).toFixed(2)}</Table.Td>
+      <Table.Td>
+        <Group>
+          <Button
+            variant="light"
+            size="xs"
+            onClick={() => setEditingService(servico)}
+          >
+            Editar
+          </Button>
+          <Button
+            variant="light"
+            color="red"
+            size="xs"
+            onClick={() => handleDeleteService(servico.id)}
+          >
+            Deletar
+          </Button>
+        </Group>
+      </Table.Td>
+    </Table.Tr>
+  ));
 
   return (
     <div>
-      <h1>Gestão de Serviços</h1>
-
-      {error && (
-        <p style={{ color: "red", border: "1px solid red", padding: "10px" }}>
-          {error}
-        </p>
-      )}
+      <Title order={2}>Gestão de Serviços</Title>
 
       <CreateServiceForm onServiceCreated={handleServiceCreated} />
 
-      <h2 style={{ marginTop: "30px" }}>Seus Serviços Cadastrados</h2>
+      <Title order={3} mt="xl" mb="md">
+        Seus Serviços Cadastrados
+      </Title>
 
-      {servicos.length > 0 ? (
-        <ul>
-          {servicos.map((servico) => (
-            <li key={servico.id}>
-              <strong>{servico.nome_servico}</strong> - Duração:{" "}
-              {servico.duracao_minutos} min - Preço: R${" "}
-              {parseFloat(servico.preco).toFixed(2)}
-              <button
-                onClick={() => handleEditClick(servico)}
-                style={{ marginLeft: "10px" }}
-              >
-                Editar
-              </button>
-              <button
-                onClick={() => handleDeleteService(servico.id)}
-                style={{ marginLeft: "10px" }}
-              >
-                Deletar
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>Você ainda não tem nenhum serviço cadastrado.</p>
-      )}
+      <Table striped withTableBorder withColumnBorders>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Nome</Table.Th>
+            <Table.Th>Duração</Table.Th>
+            <Table.Th>Preço</Table.Th>
+            <Table.Th>Ações</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>{rows}</Table.Tbody>
+      </Table>
 
       <EditServiceModal
         service={editingService}
-        onClose={handleCloseModal}
+        onClose={() => setEditingService(null)}
         onServiceUpdated={handleServiceUpdated}
       />
     </div>
