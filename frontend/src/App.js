@@ -1,8 +1,14 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+// Importação de todas as páginas e componentes necessários
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
+import AgendaPage from "./pages/AgendaPage";
+import RelatorioPage from "./pages/RelatorioPage";
+import BookingPage from "./pages/BookingPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+
 import "./App.css";
 
 function App() {
@@ -10,14 +16,20 @@ function App() {
     <BrowserRouter>
       <div className="App">
         <Routes>
-          {/* Rotas Públicas */}
+          {/* === Rotas Públicas === */}
+          {/* O usuário não precisa estar logado para ver estas páginas */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<Navigate to="/login" />} />{" "}
-          {/* Rota raiz redireciona para login */}
-          {/* Rotas Protegidas */}
+          <Route path="/agendar/:profissionalId" element={<BookingPage />} />
+
+          {/* Rota raiz: por padrão, leva para o login */}
+          <Route path="/" element={<Navigate to="/login" />} />
+
+          {/* === Rotas Protegidas === */}
+          {/* O usuário precisa estar logado. O <ProtectedRoute> cuida disso. */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardPage />} />
-            {/* Adicione outras rotas que precisam de login aqui dentro no futuro */}
+            <Route path="/agenda" element={<AgendaPage />} />
+            <Route path="/relatorios" element={<RelatorioPage />} />
           </Route>
         </Routes>
       </div>
