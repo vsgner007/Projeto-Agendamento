@@ -11,10 +11,8 @@ import {
   Alert,
   Button,
   Group,
-  SimpleGrid,
   TextInput,
 } from "@mantine/core";
-import { Calendar } from "@mantine/dates";
 import {
   IconBuildingStore,
   IconUser,
@@ -22,7 +20,7 @@ import {
   IconCalendar,
   IconCheck,
 } from "@tabler/icons-react";
-import DateTimePickerModal from "../components/DateTimePickerModal";
+import HorarioModal from "../components/HorarioModal"; // Importe o novo modal
 
 function BookingPage() {
   // Estados para as listas e seleções
@@ -84,7 +82,7 @@ function BookingPage() {
     }
   }, [selectedProfissional]);
 
-  // Função para submeter o agendamento final
+  // Função para submeter o agendamento final (sem alterações)
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
     setLoading((prev) => ({ ...prev, booking: true }));
@@ -111,10 +109,10 @@ function BookingPage() {
   // Função que o modal vai chamar quando um horário for selecionado
   const handleSlotSelected = (slot) => {
     setSelectedSlot(slot);
-    setIsModalOpen(false); // Fecha o modal
+    setIsModalOpen(false);
   };
 
-  // --- TELA DE CONFIRMAÇÃO ATUALIZADA ---
+  // Tela de sucesso (sem alterações)
   if (bookingSuccess) {
     return (
       <Container my="xl">
@@ -126,8 +124,7 @@ function BookingPage() {
             Agendamento Confirmado!
           </Title>
           <Text ta="center" mt="sm" c="dimmed">
-            Olá, {nomeCliente}! Seu horário foi agendado com sucesso. Mal
-            podemos esperar para te ver.
+            Olá, {nomeCliente}! Seu horário foi agendado com sucesso.
           </Text>
           <Paper withBorder p="md" mt="lg" radius="sm" bg="gray.0">
             <Text>
@@ -143,9 +140,8 @@ function BookingPage() {
               <strong>Data:</strong>{" "}
               {selectedSlot.toLocaleDateString("pt-BR", {
                 weekday: "long",
-                year: "numeric",
-                month: "long",
                 day: "numeric",
+                month: "long",
               })}
             </Text>
             <Text>
@@ -223,7 +219,6 @@ function BookingPage() {
           </Group>
         )}
       </SelectionBox>
-
       <SelectionBox
         icon={<IconUser />}
         title={
@@ -251,7 +246,6 @@ function BookingPage() {
           </Group>
         )}
       </SelectionBox>
-
       <SelectionBox
         icon={<IconPlus />}
         title={
@@ -325,7 +319,7 @@ function BookingPage() {
         </Alert>
       )}
 
-      <DateTimePickerModal
+      <HorarioModal
         opened={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSelectSlot={handleSlotSelected}

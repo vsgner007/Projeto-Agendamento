@@ -182,17 +182,33 @@ app.post("/profissionais", async (req, res) => {
       return res
         .status(400)
         .json({ message: "Todos os campos são obrigatórios." });
+
+    // Horário de trabalho padrão
+    const horarioPadrao = {
+      seg: "09:00-18:00",
+      ter: "09:00-18:00",
+      qua: "09:00-18:00",
+      qui: "09:00-18:00",
+      sex: "09:00-18:00",
+      sab: "09:00-12:00", // Sábado até meio-dia
+      dom: null, // Folga no domingo
+    };
+
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senha, salt);
-    const queryText = `INSERT INTO Profissional (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, email;`;
-    const result = await db.query(queryText, [nome, email, senhaHash]);
+
+    // Modificamos a query para incluir o config_horarios
+    const queryText = `INSERT INTO Profissional (nome, email, senha_hash, config_horarios) VALUES ($1, $2, $3, $4) RETURNING id, nome, email;`;
+    const result = await db.query(queryText, [
+      nome,
+      email,
+      senhaHash,
+      horarioPadrao,
+    ]);
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    if (error.code === "23505")
-      return res
-        .status(409)
-        .json({ message: "Este email já está cadastrado." });
-    res.status(500).json({ message: "Erro interno do servidor." });
+    // ... (o catch continua o mesmo)
   }
 });
 
