@@ -13,6 +13,7 @@ import {
 import { IconTrash, IconPencil, IconLicense } from "@tabler/icons-react";
 import AddFuncionarioModal from "../components/AddFuncionarioModal";
 import GerenciarServicosModal from "../components/GerenciarServicosModal";
+import EditFuncionarioModal from "../components/EditFuncionarioModal";
 
 function EquipePage() {
   const [equipe, setEquipe] = useState([]);
@@ -20,6 +21,7 @@ function EquipePage() {
   const [error, setError] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [managingFuncionario, setManagingFuncionario] = useState(null);
+  const [editingFuncionario, setEditingFuncionario] = useState(null);
 
   const fetchEquipe = async () => {
     setLoading(true);
@@ -41,7 +43,39 @@ function EquipePage() {
   }, []);
 
   const handleFuncionarioCreated = () => {
-    fetchEquipe();
+    fetchEquipe(); // Busca a lista atualizada após criar um novo
+  };
+
+  const handleFuncionarioUpdated = (funcionarioAtualizado) => {
+    // Atualiza a lista na tela sem precisar buscar novamente na API
+    setEquipe(
+      equipe.map((m) =>
+        m.id === funcionarioAtualizado.id ? funcionarioAtualizado : m
+      )
+    );
+  };
+
+  const handleDeleteFuncionario = async (funcionarioId) => {
+    if (
+      !window.confirm(
+        "Atenção: deletar um profissional também removerá todos os seus agendamentos associados. Deseja continuar?"
+      )
+    )
+      return;
+    try {
+      setError("");
+      const token = localStorage.getItem("token");
+      await axios.delete(
+        `http://localhost:3001/profissionais/${funcionarioId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      // Remove o funcionário da lista na tela instantaneamente
+      setEquipe(equipe.filter((m) => m.id !== funcionarioId));
+    } catch (err) {
+      setError("Erro ao deletar funcionário.");
+    }
   };
 
   if (loading) return <Loader />;
@@ -68,13 +102,20 @@ function EquipePage() {
               <IconLicense size={16} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Editar (futuro)">
-            <ActionIcon variant="light" disabled>
+          <Tooltip label="Editar Funcionário">
+            <ActionIcon
+              variant="light"
+              onClick={() => setEditingFuncionario(membro)}
+            >
               <IconPencil size={16} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Deletar (futuro)">
-            <ActionIcon variant="light" color="red" disabled>
+          <Tooltip label="Deletar Funcionário">
+            <ActionIcon
+              variant="light"
+              color="red"
+              onClick={() => handleDeleteFuncionario(membro.id)}
+            >
               <IconTrash size={16} />
             </ActionIcon>
           </Tooltip>
@@ -125,6 +166,12 @@ function EquipePage() {
       <GerenciarServicosModal
         funcionario={managingFuncionario}
         onClose={() => setManagingFuncionario(null)}
+      />
+
+      <EditFuncionarioModal
+        funcionario={editingFuncionario}
+        onClose={() => setEditingFuncionario(null)}
+        onFuncionarioUpdated={handleFuncionarioUpdated}
       />
     </div>
   );

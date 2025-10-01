@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   Modal,
@@ -15,6 +15,7 @@ import {
   Stack,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
+import useAuth from "../hooks/useAuth";
 
 const getNextDays = (numberOfDays) => {
   const days = [];
@@ -28,7 +29,10 @@ const getNextDays = (numberOfDays) => {
 };
 
 const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
+  const { user } = useAuth();
   const [servicos, setServicos] = useState([]);
+  const [profissionais, setProfissionais] = useState([]);
+  const [selectedProfissionalId, setSelectedProfissionalId] = useState("");
   const [selectedService, setSelectedService] = useState(null);
   const [days, setDays] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -42,6 +46,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
 
   useEffect(() => {
     if (opened) {
+      // Reseta todos os estados para um formulário limpo
       setSelectedService(null);
       setSelectedDate(null);
       setSelectedSlot(null);
@@ -49,45 +54,67 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       setTelefoneCliente("");
       setError("");
       setDays(getNextDays(14));
-      const fetchServicos = async () => {
+
+      const token = localStorage.getItem("token");
+
+      const fetchInitialData = async () => {
         try {
-          const token = localStorage.getItem("token");
-          const response = await axios.get("http://localhost:3001/servicos", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const formattedServicos = response.data.map((s) => ({
+          const [servicosRes, equipeRes] = await Promise.all([
+            axios.get("http://localhost:3001/servicos", {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            user?.role === "dono"
+              ? axios.get("http://localhost:3001/profissionais", {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+              : Promise.resolve({ data: [] }),
+          ]);
+
+          const formattedServicos = servicosRes.data.map((s) => ({
             value: s.id,
             label: s.nome_servico,
             duracao: s.duracao_minutos,
           }));
           setServicos(formattedServicos);
+
+          if (user?.role === "dono") {
+            const equipeCompleta = [
+              { id: user.id, nome: user.nome },
+              ...equipeRes.data,
+            ];
+            const formattedProfissionais = equipeCompleta.map((p) => ({
+              value: p.id,
+              label: p.nome,
+            }));
+            setProfissionais(formattedProfissionais);
+            setSelectedProfissionalId(user.id);
+          } else if (user) {
+            setSelectedProfissionalId(user.id);
+          }
         } catch (err) {
-          console.error("Erro ao buscar serviços", err);
+          console.error("Erro ao buscar dados iniciais do modal", err);
+          setError("Não foi possível carregar os dados necessários.");
         }
       };
-      fetchServicos();
-    }
-  }, [opened]);
 
-  useEffect(() => {
-    const calculateAvailableSlots = (
-      horarioTrabalho,
-      horariosOcupados,
-      duracaoServico,
-      date
-    ) => {
+      fetchInitialData();
+    }
+  }, [opened, user]);
+
+  const calculateAvailableSlots = useCallback(
+    (horarioTrabalho, horariosOcupados, duracaoServico) => {
       const slots = [];
-      if (!date || !horarioTrabalho) return slots;
+      if (!selectedDate || !horarioTrabalho) return slots;
       const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
-      const diaDaSemana = dayNames[date.getDay()];
+      const diaDaSemana = dayNames[selectedDate.getDay()];
       const horarioDoDia = horarioTrabalho[diaDaSemana];
       if (!horarioDoDia) return slots;
       const [inicioStr, fimStr] = horarioDoDia.split("-");
       const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
       const [fimHora, fimMin] = fimStr.split(":").map(Number);
-      const diaInicio = new Date(date);
+      const diaInicio = new Date(selectedDate);
       diaInicio.setHours(inicioHora, inicioMin, 0, 0);
-      const diaFim = new Date(date);
+      const diaFim = new Date(selectedDate);
       diaFim.setHours(fimHora, fimMin, 0, 0);
       let slotAtual = new Date(diaInicio);
       while (slotAtual < diaFim) {
@@ -104,23 +131,28 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
         slotAtual.setMinutes(slotAtual.getMinutes() + 15);
       }
       return slots;
-    };
+    },
+    [selectedDate]
+  );
 
-    if (selectedDate && selectedService) {
+  useEffect(() => {
+    const professionalToQuery =
+      user?.role === "dono" ? selectedProfissionalId : user?.id;
+    if (
+      selectedDate &&
+      selectedService &&
+      professionalToQuery &&
+      servicos.length > 0
+    ) {
       const fetchAvailability = async () => {
         setSlotsLoading(true);
         setAvailableSlots([]);
         const dateString = selectedDate.toISOString().split("T")[0];
-        const token = localStorage.getItem("token");
         try {
           const response = await axios.get(
-            `http://localhost:3001/agendamentos?data=${dateString}`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
+            `http://localhost:3001/publico/agenda/${professionalToQuery}?data=${dateString}`
           );
-          const { agendamentos: horariosOcupados, horarioTrabalho } =
-            response.data;
+          const { horariosOcupados, horarioTrabalho } = response.data;
           const servicoSelecionado = servicos.find(
             (s) => s.value === selectedService
           );
@@ -128,25 +160,39 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             const slots = calculateAvailableSlots(
               horarioTrabalho,
               horariosOcupados,
-              servicoSelecionado.duracao,
-              selectedDate
+              servicoSelecionado.duracao
             );
             setAvailableSlots(slots);
           }
         } catch (e) {
-          console.error(e);
+          console.error("Erro ao buscar disponibilidade", e);
+          setError("Não foi possível buscar os horários disponíveis.");
         } finally {
           setSlotsLoading(false);
         }
       };
       fetchAvailability();
     }
-  }, [selectedDate, selectedService, servicos]);
+    // --- CORREÇÃO PRINCIPAL ESTÁ AQUI ---
+    // A lista de dependências foi ajustada para quebrar o loop infinito.
+  }, [
+    selectedDate,
+    selectedService,
+    selectedProfissionalId,
+    user,
+    calculateAvailableSlots,
+  ]);
 
   const handleSubmit = async () => {
     setError("");
-    if (!selectedService || !selectedSlot || !nomeCliente || !telefoneCliente) {
-      setError("Alguns dados foram perdidos. Por favor, preencha novamente.");
+    if (
+      !selectedService ||
+      !selectedSlot ||
+      !nomeCliente ||
+      !telefoneCliente ||
+      !selectedProfissionalId
+    ) {
+      setError("Todos os campos devem ser preenchidos.");
       return;
     }
     setSubmitLoading(true);
@@ -159,6 +205,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
           data_hora_inicio: selectedSlot.toISOString(),
+          agendado_para_id: selectedProfissionalId,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -182,8 +229,24 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       centered
     >
       <Stack>
+        {user?.role === "dono" && (
+          <Select
+            label="Agendar Para o Profissional"
+            placeholder="Escolha um profissional"
+            data={profissionais}
+            value={selectedProfissionalId}
+            onChange={(value) => {
+              setSelectedProfissionalId(value);
+              setSelectedDate(null);
+              setSelectedSlot(null);
+              setSelectedService(null);
+            }}
+            withinPortal
+            required
+          />
+        )}
         <Select
-          label="1. Selecione o Serviço"
+          label="Serviço"
           placeholder="Escolha um serviço"
           data={servicos}
           value={selectedService}
@@ -192,15 +255,14 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             setSelectedDate(new Date());
             setSelectedSlot(null);
           }}
-          // --- CORREÇÃO FINAL APLICADA AQUI ---
           withinPortal
-          mb="md"
+          required
         />
 
         {selectedService && (
           <div>
             <Text size="sm" fw={500} mb="sm">
-              2. Selecione a Data e Hora
+              Data e Hora
             </Text>
             <Group
               grow
@@ -272,19 +334,21 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
         {selectedSlot && (
           <div>
             <Text size="sm" fw={500} mt="md">
-              3. Dados do Cliente
+              Dados do Cliente
             </Text>
             <TextInput
               placeholder="Nome do cliente"
               value={nomeCliente}
               onChange={(e) => setNomeCliente(e.currentTarget.value)}
               mt="sm"
+              required
             />
             <TextInput
               placeholder="(XX) XXXXX-XXXX"
               value={telefoneCliente}
               onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
               mt="sm"
+              required
             />
           </div>
         )}
