@@ -1,7 +1,13 @@
-// frontend/src/components/EditServiceModal.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Modal, TextInput, NumberInput, Button, Group } from "@mantine/core";
+import {
+  Modal,
+  TextInput,
+  NumberInput,
+  Button,
+  Group,
+  Stack,
+} from "@mantine/core";
 
 const EditServiceModal = ({ service, onClose, onServiceUpdated }) => {
   const [nome, setNome] = useState("");
@@ -29,58 +35,52 @@ const EditServiceModal = ({ service, onClose, onServiceUpdated }) => {
           duracao_minutos: parseInt(duracao),
           preco: parseFloat(preco),
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
       onServiceUpdated(response.data);
       onClose();
     } catch (err) {
       console.error(err);
-      // Aqui poderíamos adicionar uma notificação de erro
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal
-      opened={!!service} // O modal abre se 'service' não for nulo
-      onClose={onClose}
-      title="Editar Serviço"
-    >
+    <Modal opened={!!service} onClose={onClose} title="Editar Serviço" centered>
       <form onSubmit={handleSubmit}>
-        <TextInput
-          label="Nome do Serviço"
-          value={nome}
-          onChange={(e) => setNome(e.currentTarget.value)}
-          required
-        />
-        <NumberInput
-          label="Duração (minutos)"
-          value={duracao}
-          onChange={setDuracao}
-          required
-          mt="md"
-        />
-        <NumberInput
-          label="Preço (R$)"
-          value={preco}
-          onChange={setPreco}
-          precision={2}
-          step={0.5}
-          required
-          mt="md"
-        />
-        <Group justify="flex-end" mt="lg">
-          <Button variant="default" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" loading={loading}>
-            Salvar Alterações
-          </Button>
-        </Group>
+        <Stack>
+          <TextInput
+            label="Nome do Serviço"
+            value={nome}
+            onChange={(e) => setNome(e.currentTarget.value)}
+            required
+          />
+          <NumberInput
+            label="Duração (minutos)"
+            value={duracao}
+            onChange={setDuracao}
+            required
+            min={0}
+          />
+          <NumberInput
+            label="Preço (R$)"
+            value={preco}
+            onChange={setPreco}
+            precision={2}
+            step={0.5}
+            required
+            min={0}
+          />
+          <Group justify="flex-end" mt="md">
+            <Button variant="default" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={loading}>
+              Salvar Alterações
+            </Button>
+          </Group>
+        </Stack>
       </form>
     </Modal>
   );

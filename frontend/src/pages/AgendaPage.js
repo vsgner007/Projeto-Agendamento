@@ -1,5 +1,4 @@
-// frontend/src/pages/AgendaPage.js
-import React, { useState, useEffect } from "react"; // LINHA CORRIGIDA
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import AddAppointmentModal from "../components/AddAppointmentModal";
 import {
@@ -25,14 +24,12 @@ function AgendaPage() {
       const response = await axios.get("http://localhost:3001/agendamentos", {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const sortedData = response.data.agendamentos.sort(
         (a, b) => new Date(a.data_hora_inicio) - new Date(b.data_hora_inicio)
       );
       setAgendamentos(sortedData);
     } catch (err) {
       setError("Não foi possível carregar os agendamentos.");
-      console.error("Erro ao buscar agendamentos:", err);
     } finally {
       setLoading(false);
     }
@@ -140,28 +137,30 @@ function AgendaPage() {
         Próximos Compromissos
       </Title>
 
-      <Table striped withTableBorder withColumnBorders>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Data e Hora</Table.Th>
-            <Table.Th>Cliente</Table.Th>
-            <Table.Th>Serviço</Table.Th>
-            <Table.Th>Status</Table.Th>
-            <Table.Th>Ações</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.length > 0 ? (
-            rows
-          ) : (
+      <Table.ScrollContainer minWidth={800}>
+        <Table striped withTableBorder withColumnBorders highlightOnHover>
+          <Table.Thead>
             <Table.Tr>
-              <Table.Td colSpan={5} align="center">
-                Nenhum agendamento encontrado.
-              </Table.Td>
+              <Table.Th>Data e Hora</Table.Th>
+              <Table.Th>Cliente</Table.Th>
+              <Table.Th>Serviço</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th>Ações</Table.Th>
             </Table.Tr>
-          )}
-        </Table.Tbody>
-      </Table>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.length > 0 ? (
+              rows
+            ) : (
+              <Table.Tr>
+                <Table.Td colSpan={5} align="center">
+                  Nenhum agendamento encontrado.
+                </Table.Td>
+              </Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
 
       <AddAppointmentModal
         opened={isModalOpen}

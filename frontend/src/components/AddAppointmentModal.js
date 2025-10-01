@@ -12,10 +12,10 @@ import {
   Center,
   UnstyledButton,
   Alert,
+  Stack,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 
-// Helper para gerar os próximos dias
 const getNextDays = (numberOfDays) => {
   const days = [];
   const today = new Date();
@@ -28,7 +28,6 @@ const getNextDays = (numberOfDays) => {
 };
 
 const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
-  // Estados do formulário
   const [servicos, setServicos] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
   const [days, setDays] = useState([]);
@@ -37,16 +36,12 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
-
-  // Estados de UI
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Busca a lista de serviços e prepara os dias quando o modal abre
   useEffect(() => {
     if (opened) {
-      // Reseta tudo ao abrir
       setSelectedService(null);
       setSelectedDate(null);
       setSelectedSlot(null);
@@ -54,7 +49,6 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       setTelefoneCliente("");
       setError("");
       setDays(getNextDays(14));
-
       const fetchServicos = async () => {
         try {
           const token = localStorage.getItem("token");
@@ -75,67 +69,41 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     }
   }, [opened]);
 
-  // Lógica de cálculo de horários
-  const calculateAvailableSlots = (
-    horarioTrabalho,
-    horariosOcupados,
-    duracaoServico,
-    date
-  ) => {
-    const slots = [];
-    if (!date || !horarioTrabalho) return slots;
-
-    const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
-    const diaDaSemana = dayNames[date.getDay()];
-    const horarioDoDia = horarioTrabalho[diaDaSemana];
-
-    if (!horarioDoDia) return slots;
-
-    const [inicioStr, fimStr] = horarioDoDia.split("-");
-    const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
-    const [fimHora, fimMin] = fimStr.split(":").map(Number);
-
-    const diaInicio = new Date(date);
-    diaInicio.setHours(inicioHora, inicioMin, 0, 0);
-
-    const diaFim = new Date(date);
-    diaFim.setHours(fimHora, fimMin, 0, 0);
-
-    let slotAtual = new Date(diaInicio);
-
-    while (slotAtual < diaFim) {
-      const slotFim = new Date(slotAtual.getTime() + duracaoServico * 60000);
-      if (slotFim > diaFim) break;
-
-      const isOcupado = horariosOcupados.some((ocupado) => {
-        const ocupadoInicio = new Date(ocupado.data_hora_inicio);
-        const ocupadoFim = new Date(ocupado.data_hora_fim);
-        return slotAtual < ocupadoFim && slotFim > ocupadoInicio;
-      });
-
-      if (!isOcupado) {
-        slots.push(new Date(slotAtual));
-      }
-      slotAtual.setMinutes(slotAtual.getMinutes() + 15);
-    }
-    return slots;
-  };
-
-  // Busca horários disponíveis
   useEffect(() => {
-    const calculateAndSetSlots = (
+    const calculateAvailableSlots = (
       horarioTrabalho,
       horariosOcupados,
       duracaoServico,
       date
     ) => {
-      const slots = calculateAvailableSlots(
-        horarioTrabalho,
-        horariosOcupados,
-        duracaoServico,
-        date
-      );
-      setAvailableSlots(slots);
+      const slots = [];
+      if (!date || !horarioTrabalho) return slots;
+      const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+      const diaDaSemana = dayNames[date.getDay()];
+      const horarioDoDia = horarioTrabalho[diaDaSemana];
+      if (!horarioDoDia) return slots;
+      const [inicioStr, fimStr] = horarioDoDia.split("-");
+      const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
+      const [fimHora, fimMin] = fimStr.split(":").map(Number);
+      const diaInicio = new Date(date);
+      diaInicio.setHours(inicioHora, inicioMin, 0, 0);
+      const diaFim = new Date(date);
+      diaFim.setHours(fimHora, fimMin, 0, 0);
+      let slotAtual = new Date(diaInicio);
+      while (slotAtual < diaFim) {
+        const slotFim = new Date(slotAtual.getTime() + duracaoServico * 60000);
+        if (slotFim > diaFim) break;
+        const isOcupado = horariosOcupados.some((ocupado) => {
+          const ocupadoInicio = new Date(ocupado.data_hora_inicio);
+          const ocupadoFim = new Date(ocupado.data_hora_fim);
+          return slotAtual < ocupadoFim && slotFim > ocupadoInicio;
+        });
+        if (!isOcupado) {
+          slots.push(new Date(slotAtual));
+        }
+        slotAtual.setMinutes(slotAtual.getMinutes() + 15);
+      }
+      return slots;
     };
 
     if (selectedDate && selectedService) {
@@ -157,12 +125,13 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             (s) => s.value === selectedService
           );
           if (servicoSelecionado) {
-            calculateAndSetSlots(
+            const slots = calculateAvailableSlots(
               horarioTrabalho,
               horariosOcupados,
               servicoSelecionado.duracao,
               selectedDate
             );
+            setAvailableSlots(slots);
           }
         } catch (e) {
           console.error(e);
@@ -176,6 +145,10 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
 
   const handleSubmit = async () => {
     setError("");
+    if (!selectedService || !selectedSlot || !nomeCliente || !telefoneCliente) {
+      setError("Alguns dados foram perdidos. Por favor, preencha novamente.");
+      return;
+    }
     setSubmitLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -208,137 +181,140 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       size="lg"
       centered
     >
-      <Select
-        label="1. Selecione o Serviço"
-        placeholder="Escolha um serviço"
-        data={servicos}
-        value={selectedService}
-        onChange={(value) => {
-          setSelectedService(value);
-          setSelectedDate(new Date());
-          setSelectedSlot(null);
-        }}
-        mb="md"
-      />
+      <Stack>
+        <Select
+          label="1. Selecione o Serviço"
+          placeholder="Escolha um serviço"
+          data={servicos}
+          value={selectedService}
+          onChange={(value) => {
+            setSelectedService(value);
+            setSelectedDate(new Date());
+            setSelectedSlot(null);
+          }}
+          // --- CORREÇÃO FINAL APLICADA AQUI ---
+          withinPortal
+          mb="md"
+        />
 
-      {selectedService && (
-        <div style={{ marginTop: "1rem" }}>
-          <Text size="sm" fw={500} mb="sm">
-            2. Selecione a Data e Hora
-          </Text>
-          <Group
-            grow
-            preventGrowOverflow={false}
-            wrap="nowrap"
-            style={{ overflowX: "auto", paddingBottom: "15px" }}
+        {selectedService && (
+          <div>
+            <Text size="sm" fw={500} mb="sm">
+              2. Selecione a Data e Hora
+            </Text>
+            <Group
+              grow
+              preventGrowOverflow={false}
+              wrap="nowrap"
+              style={{ overflowX: "auto", paddingBottom: "15px" }}
+            >
+              {days.map((day) => {
+                const isSelected =
+                  selectedDate?.toDateString() === day.toDateString();
+                return (
+                  <UnstyledButton
+                    key={day.toISOString()}
+                    onClick={() => setSelectedDate(day)}
+                    style={{
+                      minWidth: "60px",
+                      padding: "10px",
+                      textAlign: "center",
+                      border: `1px solid ${isSelected ? "#228be6" : "#ced4da"}`,
+                      borderRadius: "8px",
+                      backgroundColor: isSelected ? "#228be6" : "transparent",
+                      color: isSelected ? "white" : "black",
+                    }}
+                  >
+                    <Text size="xs">{dayNames[day.getDay()]}</Text>
+                    <Text size="lg" fw={700}>
+                      {day.getDate()}
+                    </Text>
+                  </UnstyledButton>
+                );
+              })}
+            </Group>
+
+            {slotsLoading ? (
+              <Center mt="md">
+                <Loader />
+              </Center>
+            ) : (
+              selectedDate && (
+                <SimpleGrid cols={{ base: 4, sm: 5 }} spacing="sm" mt="md">
+                  {availableSlots.length > 0 ? (
+                    availableSlots.map((slot, i) => (
+                      <Button
+                        key={i}
+                        variant={
+                          selectedSlot?.getTime() === slot.getTime()
+                            ? "filled"
+                            : "outline"
+                        }
+                        onClick={() => setSelectedSlot(slot)}
+                      >
+                        {slot.toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Button>
+                    ))
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Nenhum horário livre para esta data.
+                    </Text>
+                  )}
+                </SimpleGrid>
+              )
+            )}
+          </div>
+        )}
+
+        {selectedSlot && (
+          <div>
+            <Text size="sm" fw={500} mt="md">
+              3. Dados do Cliente
+            </Text>
+            <TextInput
+              placeholder="Nome do cliente"
+              value={nomeCliente}
+              onChange={(e) => setNomeCliente(e.currentTarget.value)}
+              mt="sm"
+            />
+            <TextInput
+              placeholder="(XX) XXXXX-XXXX"
+              value={telefoneCliente}
+              onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
+              mt="sm"
+            />
+          </div>
+        )}
+
+        {error && (
+          <Alert
+            icon={<IconAlertCircle size={16} />}
+            color="red"
+            title="Erro"
+            mt="md"
           >
-            {days.map((day) => {
-              const isSelected =
-                selectedDate?.toDateString() === day.toDateString();
-              return (
-                <UnstyledButton
-                  key={day.toISOString()}
-                  onClick={() => setSelectedDate(day)}
-                  style={{
-                    minWidth: "60px",
-                    padding: "10px",
-                    textAlign: "center",
-                    border: `1px solid ${isSelected ? "#228be6" : "#ced4da"}`,
-                    borderRadius: "8px",
-                    backgroundColor: isSelected ? "#228be6" : "transparent",
-                    color: isSelected ? "white" : "black",
-                  }}
-                >
-                  <Text size="xs">{dayNames[day.getDay()]}</Text>
-                  <Text size="lg" fw={700}>
-                    {day.getDate()}
-                  </Text>
-                </UnstyledButton>
-              );
-            })}
-          </Group>
+            {error}
+          </Alert>
+        )}
 
-          {slotsLoading ? (
-            <Center mt="md">
-              <Loader />
-            </Center>
-          ) : (
-            selectedDate && (
-              <SimpleGrid cols={{ base: 4, sm: 5 }} spacing="sm" mt="md">
-                {availableSlots.length > 0 ? (
-                  availableSlots.map((slot, i) => (
-                    <Button
-                      key={i}
-                      variant={
-                        selectedSlot?.getTime() === slot.getTime()
-                          ? "filled"
-                          : "outline"
-                      }
-                      onClick={() => setSelectedSlot(slot)}
-                    >
-                      {slot.toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Button>
-                  ))
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    Nenhum horário livre para esta data.
-                  </Text>
-                )}
-              </SimpleGrid>
-            )
-          )}
-        </div>
-      )}
-
-      {selectedSlot && (
-        <div style={{ marginTop: "1rem" }}>
-          <Text size="sm" fw={500}>
-            3. Dados do Cliente
-          </Text>
-          <TextInput
-            placeholder="Nome do cliente"
-            value={nomeCliente}
-            onChange={(e) => setNomeCliente(e.currentTarget.value)}
-            mt="sm"
-          />
-          <TextInput
-            placeholder="(XX) XXXXX-XXXX"
-            value={telefoneCliente}
-            onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
-            mt="sm"
-          />
-        </div>
-      )}
-
-      {error && (
-        <Alert
-          icon={<IconAlertCircle size={16} />}
-          color="red"
-          title="Erro"
-          mt="md"
-        >
-          {error}
-        </Alert>
-      )}
-
-      <Group justify="flex-end" mt="xl">
-        <Button variant="default" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          loading={submitLoading}
-          disabled={!nomeCliente || !telefoneCliente || !selectedSlot}
-        >
-          Confirmar Agendamento
-        </Button>
-      </Group>
+        <Group justify="flex-end" mt="xl">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            loading={submitLoading}
+            disabled={!nomeCliente || !telefoneCliente || !selectedSlot}
+          >
+            Confirmar Agendamento
+          </Button>
+        </Group>
+      </Stack>
     </Modal>
   );
 };
 
-// --- A LINHA QUE FALTAVA ---
 export default AddAppointmentModal;

@@ -11,7 +11,6 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 
-// Helper para gerar os próximos dias
 const getNextDays = (numberOfDays) => {
   const days = [];
   const today = new Date();
@@ -35,27 +34,34 @@ const HorarioModal = ({
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
-  // Gera a lista de dias quando o modal abre
   useEffect(() => {
-    setDays(getNextDays(14));
-    setSelectedDate(new Date());
+    if (opened) {
+      setDays(getNextDays(14));
+      setSelectedDate(new Date());
+    }
   }, [opened]);
 
-  // Busca horários quando uma data é selecionada
   useEffect(() => {
-    // A função de cálculo agora vive aqui dentro para resolver o aviso do React.
     const calculateAvailableSlots = (
+      horarioTrabalho,
       horariosOcupados,
       duracaoServico,
       date
     ) => {
       const slots = [];
-      if (!date) return slots;
-      const diaInicio = new Date(
-        `${date.toISOString().split("T")[0]}T09:00:00`
-      );
-      const diaFim = new Date(`${date.toISOString().split("T")[0]}T18:00:00`);
-      let slotAtual = diaInicio;
+      if (!date || !horarioTrabalho) return slots;
+      const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+      const diaDaSemana = dayNames[date.getDay()];
+      const horarioDoDia = horarioTrabalho[diaDaSemana];
+      if (!horarioDoDia) return slots;
+      const [inicioStr, fimStr] = horarioDoDia.split("-");
+      const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
+      const [fimHora, fimMin] = fimStr.split(":").map(Number);
+      const diaInicio = new Date(date);
+      diaInicio.setHours(inicioHora, inicioMin, 0, 0);
+      const diaFim = new Date(date);
+      diaFim.setHours(fimHora, fimMin, 0, 0);
+      let slotAtual = new Date(diaInicio);
       while (slotAtual < diaFim) {
         const slotFim = new Date(slotAtual.getTime() + duracaoServico * 60000);
         if (slotFim > diaFim) break;
@@ -81,9 +87,13 @@ const HorarioModal = ({
           const response = await axios.get(
             `http://localhost:3001/publico/agenda/${profissionalId}?data=${dateString}`
           );
-          const { horariosOcupados } = response.data;
+
+          // --- CORREÇÃO APLICADA AQUI ---
+          // Agora lemos corretamente tanto os horários ocupados quanto o horário de trabalho
+          const { horariosOcupados, horarioTrabalho } = response.data;
 
           const slots = calculateAvailableSlots(
+            horarioTrabalho,
             horariosOcupados,
             service.duracao_minutos,
             selectedDate
@@ -109,7 +119,6 @@ const HorarioModal = ({
       centered
       size="md"
     >
-      {/* Seletor de Dias Horizontal */}
       <Group
         grow
         preventGrowOverflow={false}
@@ -142,7 +151,6 @@ const HorarioModal = ({
         })}
       </Group>
 
-      {/* Grade de Horários */}
       {selectedDate && (
         <>
           <Text my="md">

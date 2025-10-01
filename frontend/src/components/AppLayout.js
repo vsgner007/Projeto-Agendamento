@@ -1,6 +1,6 @@
-// frontend/src/components/AppLayout.js
 import React from "react";
-import { AppShell, Title, NavLink } from "@mantine/core";
+import { AppShell, Title, NavLink, Burger, Group } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import {
   NavLink as RouterNavLink,
   Outlet,
@@ -11,16 +11,29 @@ import {
   IconClipboardList,
   IconCalendar,
   IconLogout,
+  IconChartPie,
+  IconSettings,
+  IconUsers,
 } from "@tabler/icons-react";
+import useAuth from "../hooks/useAuth"; // Importa nosso hook de autenticação
 
 const AppLayout = () => {
+  const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
+  const { user } = useAuth(); // Usa o hook para pegar os dados do usuário
+
+  // --- NOSSO SEGUNDO ESPIÃO ---
+  // Vamos ver o que o hook está retornando
+  console.log("DADOS DO USUÁRIO NO AppLayout:", user);
+  console.log("O 'role' do usuário é:", user?.role);
+  // -----------------------------
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     navigate("/login");
   };
 
+  // Links base, visíveis para todos
   const navLinks = [
     {
       icon: <IconClipboardList size="1rem" />,
@@ -28,37 +41,54 @@ const AppLayout = () => {
       path: "/dashboard",
     },
     { icon: <IconCalendar size="1rem" />, label: "Agenda", path: "/agenda" },
-    {
-      icon: <IconGauge size="1rem" />,
-      label: "Financeiro",
-      path: "/relatorios",
-    },
   ];
+
+  // Lógica condicional com logs para sabermos a decisão
+  if (user?.role === "dono") {
+    console.log(
+      "CONDIÇÃO VERDADEIRA: O usuário é 'dono'. Adicionando links de admin."
+    );
+    navLinks.push(
+      {
+        icon: <IconGauge size="1rem" />,
+        label: "Financeiro",
+        path: "/relatorios",
+      },
+      {
+        icon: <IconChartPie size="1rem" />,
+        label: "Análises",
+        path: "/analytics",
+      },
+      { icon: <IconUsers size="1rem" />, label: "Equipe", path: "/equipe" },
+      {
+        icon: <IconSettings size="1rem" />,
+        label: "Configurações",
+        path: "/configuracoes",
+      }
+    );
+  } else {
+    console.log(
+      "CONDIÇÃO FALSA: O usuário NÃO é 'dono' ou o 'role' não foi encontrado."
+    );
+  }
 
   return (
     <AppShell
       padding="md"
-      header={{ height: 60 }} // Estrutura de prop atualizada
+      header={{ height: 60 }}
       navbar={{
         width: 300,
-        breakpoint: "sm", // O menu será escondido em telas menores que 'sm'
+        breakpoint: "sm",
+        collapsed: { mobile: !opened },
       }}
     >
-      {/* Cabeçalho Superior */}
       <AppShell.Header>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            height: "100%",
-            padding: "0 20px",
-          }}
-        >
+        <Group h="100%" px="md">
+          <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
           <Title order={3}>Painel do Profissional</Title>
-        </div>
+        </Group>
       </AppShell.Header>
 
-      {/* Menu de Navegação Lateral */}
       <AppShell.Navbar p="md">
         <AppShell.Section grow>
           {navLinks.map((link) => (
@@ -69,6 +99,7 @@ const AppLayout = () => {
               component={RouterNavLink}
               to={link.path}
               active={window.location.pathname === link.path}
+              onClick={toggle}
             />
           ))}
         </AppShell.Section>
@@ -81,7 +112,6 @@ const AppLayout = () => {
         </AppShell.Section>
       </AppShell.Navbar>
 
-      {/* Área de Conteúdo Principal */}
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
