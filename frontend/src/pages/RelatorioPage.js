@@ -1,4 +1,3 @@
-// frontend/src/pages/RelatorioPage.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -12,8 +11,8 @@ import {
   Text,
   Center,
 } from "@mantine/core";
+import useAuth from "../hooks/useAuth";
 
-// Funções helper para gerar as opções dos filtros
 const getYearOptions = () => {
   const currentYear = new Date().getFullYear();
   const years = [];
@@ -39,12 +38,11 @@ const monthOptions = [
 ];
 
 function RelatorioPage() {
+  const { user } = useAuth();
   const [servicosRealizados, setServicosRealizados] = useState([]);
   const [totalDoPeriodo, setTotalDoPeriodo] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // Estados para os filtros
   const [selectedMonth, setSelectedMonth] = useState(
     (new Date().getMonth() + 1).toString()
   );
@@ -52,7 +50,6 @@ function RelatorioPage() {
     new Date().getFullYear().toString()
   );
 
-  // useEffect agora depende dos filtros para buscar os dados
   useEffect(() => {
     const fetchRelatorio = async () => {
       setLoading(true);
@@ -68,7 +65,6 @@ function RelatorioPage() {
 
         setServicosRealizados(response.data);
 
-        // Calcula o total do período
         const total = response.data.reduce(
           (acc, servico) => acc + parseFloat(servico.preco),
           0
@@ -94,6 +90,18 @@ function RelatorioPage() {
   const monthLabel =
     monthOptions.find((m) => m.value === selectedMonth)?.label || "";
 
+  const rows = servicosRealizados.map((servico) => (
+    <Table.Tr key={servico.id}>
+      <Table.Td>
+        {new Date(servico.data_hora_inicio).toLocaleDateString("pt-BR")}
+      </Table.Td>
+      <Table.Td>{servico.nome_cliente}</Table.Td>
+      <Table.Td>{servico.nome_profissional}</Table.Td>
+      <Table.Td>{servico.nome_servico}</Table.Td>
+      <Table.Td>{parseFloat(servico.preco).toFixed(2)}</Table.Td>
+    </Table.Tr>
+  ));
+
   return (
     <div>
       <Title order={2}>Relatório Financeiro</Title>
@@ -102,7 +110,7 @@ function RelatorioPage() {
       </p>
 
       <Paper withBorder p="md" mt="md" radius="md">
-        <Group>
+        <Group grow>
           <Select
             label="Mês"
             data={monthOptions}
@@ -127,38 +135,30 @@ function RelatorioPage() {
           <Title order={4}>
             Serviços Concluídos em {monthLabel} de {selectedYear}
           </Title>
-          <Table striped withTableBorder withColumnBorders mt="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Data</Table.Th>
-                <Table.Th>Cliente</Table.Th>
-                <Table.Th>Serviço</Table.Th>
-                <Table.Th>Valor (R$)</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {servicosRealizados.length > 0 ? (
-                servicosRealizados.map((servico) => (
-                  <Table.Tr key={servico.id}>
-                    <Table.Td>
-                      {new Date(servico.data_hora_inicio).toLocaleDateString(
-                        "pt-BR"
-                      )}
-                    </Table.Td>
-                    <Table.Td>{servico.nome_cliente}</Table.Td>
-                    <Table.Td>{servico.nome_servico}</Table.Td>
-                    <Table.Td>{parseFloat(servico.preco).toFixed(2)}</Table.Td>
-                  </Table.Tr>
-                ))
-              ) : (
+          <Table.ScrollContainer minWidth={800}>
+            <Table striped withTableBorder withColumnBorders mt="md">
+              <Table.Thead>
                 <Table.Tr>
-                  <Table.Td colSpan={4} align="center">
-                    Nenhum serviço concluído encontrado neste período.
-                  </Table.Td>
+                  <Table.Th>Data</Table.Th>
+                  <Table.Th>Cliente</Table.Th>
+                  <Table.Th>Profissional</Table.Th>
+                  <Table.Th>Serviço(s)</Table.Th>
+                  <Table.Th>Valor (R$)</Table.Th>
                 </Table.Tr>
-              )}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {rows.length > 0 ? (
+                  rows
+                ) : (
+                  <Table.Tr>
+                    <Table.Td colSpan={5} align="center">
+                      Nenhum serviço concluído encontrado neste período.
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
           <Title order={5} mt="md" style={{ textAlign: "right" }}>
             Total do Período: R$ {totalDoPeriodo.toFixed(2)}
           </Title>

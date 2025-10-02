@@ -12,10 +12,10 @@ import {
   Group,
   Select,
 } from "@mantine/core";
+import useAuth from "../hooks/useAuth";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Helper para gerar a lista de meses e anos
 const getYearOptions = () => {
   const currentYear = new Date().getFullYear();
   const years = [];
@@ -41,6 +41,7 @@ const monthOptions = [
 ];
 
 function AnalyticsPage() {
+  const { user } = useAuth();
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,8 +53,40 @@ function AnalyticsPage() {
   const [selectedYear, setSelectedYear] = useState(
     new Date().getFullYear().toString()
   );
+  const [profissionais, setProfissionais] = useState([]);
+  const [selectedProfissionalId, setSelectedProfissionalId] = useState("todos");
 
-  // useEffect agora depende dos filtros
+  // Busca a lista de profissionais para o filtro
+  useEffect(() => {
+    const fetchEquipe = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(
+          "http://localhost:3001/profissionais",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const equipeCompleta = [
+          { id: user.id, nome: user.nome },
+          ...response.data,
+        ];
+        const formattedProfissionais = equipeCompleta.map((p) => ({
+          value: p.id,
+          label: p.nome,
+        }));
+        setProfissionais([
+          { value: "todos", label: "Todos os Profissionais" },
+          ...formattedProfissionais,
+        ]);
+      } catch (err) {
+        console.error("Erro ao buscar equipe para filtro", err);
+      }
+    };
+    if (user?.role === "dono") fetchEquipe();
+  }, [user]);
+
+  // useEffect que busca os dados do gráfico, agora depende de todos os filtros
   useEffect(() => {
     if (!selectedMonth || !selectedYear) return;
 
@@ -63,12 +96,15 @@ function AnalyticsPage() {
       setChartData(null);
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `http://localhost:3001/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        let url = `http://localhost:3001/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`;
+
+        if (selectedProfissionalId && selectedProfissionalId !== "todos") {
+          url += `&profissionalId=${selectedProfissionalId}`;
+        }
+
+        const response = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         const dataFromApi = response.data;
         if (dataFromApi.length > 0) {
@@ -100,17 +136,18 @@ function AnalyticsPage() {
       }
     };
     fetchChartData();
-  }, [selectedMonth, selectedYear]); // Roda sempre que o mês ou ano mudar
+  }, [selectedMonth, selectedYear, selectedProfissionalId]);
 
   const monthLabel =
     monthOptions.find((m) => m.value === selectedMonth)?.label || "";
+  const profissionalLabel =
+    profissionais.find((p) => p.value === selectedProfissionalId)?.label || "";
 
   return (
     <div>
       <Title order={2} mb="lg">
         Análises de Faturamento
       </Title>
-
       <Paper withBorder shadow="sm" p="lg" radius="md">
         <Group>
           <Select
@@ -125,10 +162,17 @@ function AnalyticsPage() {
             value={selectedYear}
             onChange={setSelectedYear}
           />
+          <Select
+            label="Profissional"
+            data={profissionais}
+            value={selectedProfissionalId}
+            onChange={setSelectedProfissionalId}
+          />
         </Group>
 
         <Title order={4} mt="xl">
-          Faturamento por Serviço ({monthLabel} de {selectedYear})
+          Faturamento por Serviço ({profissionalLabel} em {monthLabel} de{" "}
+          {selectedYear})
         </Title>
 
         {loading ? (

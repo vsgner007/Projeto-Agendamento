@@ -80,12 +80,10 @@ app.get("/publico/agenda/:profissionalId", async (req, res) => {
       profissionalId,
     ]);
     if (donoHorarioResult.rows.length === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            "Não foi possível encontrar o horário de trabalho para este profissional.",
-        });
+      return res.status(404).json({
+        message:
+          "Não foi possível encontrar o horário de trabalho para este profissional.",
+      });
     res.status(200).json({
       horariosOcupados: agendamentosResult.rows,
       horarioTrabalho: donoHorarioResult.rows[0].config_horarios,
@@ -214,21 +212,17 @@ app.post(
       const donoId = req.profissional.id;
       const { nome, email, senha, role } = req.body;
       if (!nome || !email || !senha || !role)
-        return res
-          .status(400)
-          .json({
-            message: "Nome, email, senha e papel (role) são obrigatórios.",
-          });
+        return res.status(400).json({
+          message: "Nome, email, senha e papel (role) são obrigatórios.",
+        });
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [donoId]
       );
       if (!filialResult.rows[0]?.filial_id)
-        return res
-          .status(400)
-          .json({
-            message: "Administrador não está associado a uma filial válida.",
-          });
+        return res.status(400).json({
+          message: "Administrador não está associado a uma filial válida.",
+        });
       const filial_id = filialResult.rows[0].filial_id;
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
@@ -607,12 +601,10 @@ app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
     }
     const result = await db.query(queryText, values);
     if (result.rowCount === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            "Agendamento não encontrado ou você não tem permissão para atualizá-lo.",
-        });
+      return res.status(404).json({
+        message:
+          "Agendamento não encontrado ou você não tem permissão para atualizá-lo.",
+      });
     res.status(200).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -635,12 +627,10 @@ app.delete("/agendamentos/:id", authMiddleware, async (req, res) => {
     }
     const result = await db.query(queryText, values);
     if (result.rowCount === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            "Agendamento não encontrado ou você não tem permissão para deletá-lo.",
-        });
+      return res.status(404).json({
+        message:
+          "Agendamento não encontrado ou você não tem permissão para deletá-lo.",
+      });
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -692,7 +682,7 @@ app.put(
   }
 );
 
-// --- Relatórios ---
+// --- Relatórios (COM AS CORREÇÕES) ---
 app.get(
   "/relatorios/servicos-realizados",
   authMiddleware,
@@ -701,14 +691,30 @@ app.get(
     try {
       const { id: dono_id } = req.profissional;
       const { mes, ano } = req.query;
+
       const filialSubQuery = `(SELECT filial_id FROM profissional WHERE id = $1)`;
-      let queryText = `SELECT a.id, a.data_hora_inicio, c.nome_cliente, s.nome_servico, s.preco FROM agendamento a JOIN cliente c ON a.cliente_id = c.id JOIN servico s ON a.servico_id = s.id WHERE a.status = 'concluido' AND a.profissional_id IN (SELECT id FROM profissional WHERE filial_id = ${filialSubQuery})`;
+
+      let queryText = `
+        SELECT 
+            ca.id, 
+            ca.data_hora_inicio, 
+            c.nome_cliente, 
+            p.nome as nome_profissional,
+            ca.preco_total as preco, -- Usamos o preço total do carrinho
+            (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
+        FROM carrinho_agendamento ca
+        JOIN cliente c ON ca.cliente_id = c.id
+        JOIN profissional p ON ca.profissional_id = p.id
+        WHERE ca.status = 'concluido' AND p.filial_id = ${filialSubQuery}
+      `;
       const values = [dono_id];
+
       if (mes && ano) {
-        queryText += ` AND EXTRACT(MONTH FROM a.data_hora_inicio) = $2 AND EXTRACT(YEAR FROM a.data_hora_inicio) = $3`;
+        queryText += ` AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3`;
         values.push(mes, ano);
       }
-      queryText += ` ORDER BY a.data_hora_inicio DESC;`;
+      queryText += ` ORDER BY ca.data_hora_inicio DESC;`;
+
       const result = await db.query(queryText, values);
       res.status(200).json(result.rows);
     } catch (error) {
@@ -724,12 +730,36 @@ app.get(
   async (req, res) => {
     try {
       const { id: dono_id } = req.profissional;
-      const { mes, ano } = req.query;
+      const { mes, ano, profissionalId } = req.query; // Adicionamos profissionalId
       if (!mes || !ano)
         return res.status(400).json({ message: "Mês e ano são obrigatórios." });
+
       const filialSubQuery = `(SELECT filial_id FROM profissional WHERE id = $1)`;
-      const queryText = `SELECT s.nome_servico, SUM(s.preco) as faturamento_total, COUNT(a.id) as quantidade FROM agendamento a JOIN servico s ON a.servico_id = s.id WHERE a.status = 'concluido' AND a.profissional_id IN (SELECT id FROM profissional WHERE filial_id = ${filialSubQuery}) AND EXTRACT(MONTH FROM a.data_hora_inicio) = $2 AND EXTRACT(YEAR FROM a.data_hora_inicio) = $3 GROUP BY s.nome_servico ORDER BY faturamento_total DESC;`;
-      const result = await db.query(queryText, [dono_id, mes, ano]);
+
+      let queryText = `
+        SELECT 
+            s.nome_servico, 
+            SUM(s.preco) as faturamento_total,
+            COUNT(s.id) as quantidade
+        FROM carrinho_agendamento ca
+        JOIN carrinho_servico cs ON ca.id = cs.carrinho_id
+        JOIN servico s ON cs.servico_id = s.id
+        WHERE ca.status = 'concluido'
+        AND ca.profissional_id IN (SELECT id FROM profissional WHERE filial_id = ${filialSubQuery})
+        AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 
+        AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3 
+      `;
+      const values = [dono_id, mes, ano];
+
+      // Se um profissional específico for selecionado, adiciona o filtro
+      if (profissionalId) {
+        queryText += ` AND ca.profissional_id = $4`;
+        values.push(profissionalId);
+      }
+
+      queryText += ` GROUP BY s.nome_servico ORDER BY faturamento_total DESC;`;
+
+      const result = await db.query(queryText, values);
       res.status(200).json(result.rows);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
   Modal,
@@ -44,6 +44,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Efeito ÚNICO para buscar dados iniciais quando o modal abre
   useEffect(() => {
     if (opened) {
       // Reseta todos os estados para um formulário limpo
@@ -70,29 +71,27 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
               : Promise.resolve({ data: [] }),
           ]);
 
-          const formattedServicos = servicosRes.data.map((s) => ({
-            value: s.id,
-            label: s.nome_servico,
-            duracao: s.duracao_minutos,
-          }));
-          setServicos(formattedServicos);
+          setServicos(
+            servicosRes.data.map((s) => ({
+              value: s.id,
+              label: s.nome_servico,
+              duracao: s.duracao_minutos,
+            }))
+          );
 
           if (user?.role === "dono") {
             const equipeCompleta = [
               { id: user.id, nome: user.nome },
               ...equipeRes.data,
             ];
-            const formattedProfissionais = equipeCompleta.map((p) => ({
-              value: p.id,
-              label: p.nome,
-            }));
-            setProfissionais(formattedProfissionais);
+            setProfissionais(
+              equipeCompleta.map((p) => ({ value: p.id, label: p.nome }))
+            );
             setSelectedProfissionalId(user.id);
           } else if (user) {
             setSelectedProfissionalId(user.id);
           }
         } catch (err) {
-          console.error("Erro ao buscar dados iniciais do modal", err);
           setError("Não foi possível carregar os dados necessários.");
         }
       };
@@ -101,87 +100,72 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     }
   }, [opened, user]);
 
-  const calculateAvailableSlots = useCallback(
-    (horarioTrabalho, horariosOcupados, duracaoServico) => {
-      const slots = [];
-      if (!selectedDate || !horarioTrabalho) return slots;
-      const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
-      const diaDaSemana = dayNames[selectedDate.getDay()];
-      const horarioDoDia = horarioTrabalho[diaDaSemana];
-      if (!horarioDoDia) return slots;
-      const [inicioStr, fimStr] = horarioDoDia.split("-");
-      const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
-      const [fimHora, fimMin] = fimStr.split(":").map(Number);
-      const diaInicio = new Date(selectedDate);
-      diaInicio.setHours(inicioHora, inicioMin, 0, 0);
-      const diaFim = new Date(selectedDate);
-      diaFim.setHours(fimHora, fimMin, 0, 0);
-      let slotAtual = new Date(diaInicio);
-      while (slotAtual < diaFim) {
-        const slotFim = new Date(slotAtual.getTime() + duracaoServico * 60000);
-        if (slotFim > diaFim) break;
-        const isOcupado = horariosOcupados.some((ocupado) => {
-          const ocupadoInicio = new Date(ocupado.data_hora_inicio);
-          const ocupadoFim = new Date(ocupado.data_hora_fim);
-          return slotAtual < ocupadoFim && slotFim > ocupadoInicio;
-        });
-        if (!isOcupado) {
-          slots.push(new Date(slotAtual));
-        }
-        slotAtual.setMinutes(slotAtual.getMinutes() + 15);
-      }
-      return slots;
-    },
-    [selectedDate]
-  );
+  // Função manual para buscar horários, chamada explicitamente ao clicar em uma data
+  const handleDateChange = async (date) => {
+    setSelectedDate(date);
+    setSelectedSlot(null);
+    if (!selectedService) return;
 
-  useEffect(() => {
     const professionalToQuery =
-      user?.role === "dono" ? selectedProfissionalId : user?.id;
-    if (
-      selectedDate &&
-      selectedService &&
-      professionalToQuery &&
-      servicos.length > 0
-    ) {
-      const fetchAvailability = async () => {
-        setSlotsLoading(true);
-        setAvailableSlots([]);
-        const dateString = selectedDate.toISOString().split("T")[0];
-        try {
-          const response = await axios.get(
-            `http://localhost:3001/publico/agenda/${professionalToQuery}?data=${dateString}`
-          );
-          const { horariosOcupados, horarioTrabalho } = response.data;
-          const servicoSelecionado = servicos.find(
-            (s) => s.value === selectedService
-          );
-          if (servicoSelecionado) {
-            const slots = calculateAvailableSlots(
-              horarioTrabalho,
-              horariosOcupados,
-              servicoSelecionado.duracao
+      user?.role === "dono" ? selectedProfissionalId : user.id;
+    if (!professionalToQuery) return;
+
+    setSlotsLoading(true);
+    setAvailableSlots([]);
+    const dateString = date.toISOString().split("T")[0];
+
+    try {
+      const response = await axios.get(
+        `http://localhost:3001/publico/agenda/${professionalToQuery}?data=${dateString}`
+      );
+      const { horariosOcupados, horarioTrabalho } = response.data;
+      const servicoSelecionado = servicos.find(
+        (s) => s.value === selectedService
+      );
+
+      if (servicoSelecionado && horarioTrabalho) {
+        // Lógica de cálculo de horários
+        const slots = [];
+        const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+        const diaDaSemana = dayNames[date.getDay()];
+        const horarioDoDia = horarioTrabalho[diaDaSemana];
+
+        if (horarioDoDia) {
+          const [inicioStr, fimStr] = horarioDoDia.split("-");
+          const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
+          const [fimHora, fimMin] = fimStr.split(":").map(Number);
+
+          const diaInicio = new Date(date);
+          diaInicio.setHours(inicioHora, inicioMin, 0, 0);
+
+          const diaFim = new Date(date);
+          diaFim.setHours(fimHora, fimMin, 0, 0);
+
+          let slotAtual = new Date(diaInicio);
+          while (slotAtual < diaFim) {
+            const slotFim = new Date(
+              slotAtual.getTime() + servicoSelecionado.duracao * 60000
             );
-            setAvailableSlots(slots);
+            if (slotFim > diaFim) break;
+            const isOcupado = horariosOcupados.some(
+              (ocupado) =>
+                new Date(ocupado.data_hora_inicio) < slotFim &&
+                new Date(ocupado.data_hora_fim) > slotAtual
+            );
+            if (!isOcupado) {
+              slots.push(new Date(slotAtual));
+            }
+            slotAtual.setMinutes(slotAtual.getMinutes() + 15);
           }
-        } catch (e) {
-          console.error("Erro ao buscar disponibilidade", e);
-          setError("Não foi possível buscar os horários disponíveis.");
-        } finally {
-          setSlotsLoading(false);
         }
-      };
-      fetchAvailability();
+        setAvailableSlots(slots);
+      }
+    } catch (e) {
+      setError("Não foi possível buscar os horários disponíveis.");
+    } finally {
+      setSlotsLoading(false);
     }
-    // --- CORREÇÃO PRINCIPAL ESTÁ AQUI ---
-    // A lista de dependências foi ajustada para quebrar o loop infinito.
-  }, [
-    selectedDate,
-    selectedService,
-    selectedProfissionalId,
-    user,
-    calculateAvailableSlots,
-  ]);
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -237,9 +221,9 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             value={selectedProfissionalId}
             onChange={(value) => {
               setSelectedProfissionalId(value);
+              setSelectedService(null);
               setSelectedDate(null);
               setSelectedSlot(null);
-              setSelectedService(null);
             }}
             withinPortal
             required
@@ -252,7 +236,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
           value={selectedService}
           onChange={(value) => {
             setSelectedService(value);
-            setSelectedDate(new Date());
+            setSelectedDate(null);
             setSelectedSlot(null);
           }}
           withinPortal
@@ -276,7 +260,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
                 return (
                   <UnstyledButton
                     key={day.toISOString()}
-                    onClick={() => setSelectedDate(day)}
+                    onClick={() => handleDateChange(day)}
                     style={{
                       minWidth: "60px",
                       padding: "10px",

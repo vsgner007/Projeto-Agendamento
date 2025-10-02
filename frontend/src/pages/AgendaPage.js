@@ -36,7 +36,6 @@ function AgendaPage() {
       }
     } catch (err) {
       setError("Não foi possível carregar os agendamentos.");
-      console.error("Erro ao buscar agendamentos:", err);
     } finally {
       setLoading(false);
     }
@@ -46,9 +45,7 @@ function AgendaPage() {
     fetchAgendamentos();
   }, []);
 
-  const handleAppointmentCreated = () => {
-    fetchAgendamentos();
-  };
+  const handleAppointmentCreated = () => fetchAgendamentos();
 
   const handleCancelAppointment = async (agendamentoId) => {
     if (!window.confirm("Tem certeza que deseja cancelar este agendamento?"))
@@ -116,30 +113,27 @@ function AgendaPage() {
       <Table.Td>{ag.nome_servico}</Table.Td>
       <Table.Td>
         <Badge
-          color={
-            ag.status === "concluido"
-              ? "green"
-              : ag.status === "cancelado"
-              ? "red"
-              : "blue"
-          }
+          color={ag.status === "concluido" ? "green" : "blue"}
           variant="light"
         >
           {ag.status}
         </Badge>
       </Table.Td>
-      <Table.Td>
-        <Group>
-          {ag.status === "agendado" && (
-            <Button
-              variant="light"
-              size="xs"
-              onClick={() => handleUpdateStatus(ag.id, "concluido")}
-            >
-              Concluir
-            </Button>
-          )}
-          {ag.status !== "concluido" && (
+
+      {/* --- MUDANÇA APLICADA AQUI --- */}
+      {/* A coluna de ações só é renderizada se o filtro NÃO for 'concluido' */}
+      {filtroStatus !== "concluido" && (
+        <Table.Td>
+          <Group>
+            {ag.status === "agendado" && (
+              <Button
+                variant="light"
+                size="xs"
+                onClick={() => handleUpdateStatus(ag.id, "concluido")}
+              >
+                Concluir
+              </Button>
+            )}
             <Button
               variant="light"
               color="red"
@@ -148,11 +142,16 @@ function AgendaPage() {
             >
               Cancelar
             </Button>
-          )}
-        </Group>
-      </Table.Td>
+          </Group>
+        </Table.Td>
+      )}
     </Table.Tr>
   ));
+
+  // Lógica para o colspan dinâmico
+  let colSpan = 5;
+  if (user?.role === "dono") colSpan++;
+  if (filtroStatus === "concluido") colSpan--;
 
   return (
     <div>
@@ -190,7 +189,8 @@ function AgendaPage() {
               {user?.role === "dono" && <Table.Th>Profissional</Table.Th>}
               <Table.Th>Serviço</Table.Th>
               <Table.Th>Status</Table.Th>
-              <Table.Th>Ações</Table.Th>
+              {/* O cabeçalho da coluna também é condicional */}
+              {filtroStatus !== "concluido" && <Table.Th>Ações</Table.Th>}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -198,10 +198,7 @@ function AgendaPage() {
               rows
             ) : (
               <Table.Tr>
-                <Table.Td
-                  colSpan={user?.role === "dono" ? 7 : 6}
-                  align="center"
-                >
+                <Table.Td colSpan={colSpan} align="center">
                   Nenhum agendamento encontrado para este filtro.
                 </Table.Td>
               </Table.Tr>
