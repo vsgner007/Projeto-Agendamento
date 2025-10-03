@@ -1,4 +1,3 @@
-// frontend/src/components/AddFuncionarioModal.js
 import React, { useState } from "react";
 import axios from "axios";
 import {
@@ -17,8 +16,7 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [role, setRole] = useState("funcionario"); // Padrão é 'funcionario'
-
+  const [role, setRole] = useState("funcionario");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,15 +30,14 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
         { nome, email, senha, role },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      onFuncionarioCreated(); // Avisa o componente pai para atualizar a lista
-      onClose(); // Fecha o modal
+      onFuncionarioCreated();
+      onClose();
     } catch (err) {
       if (err.response && err.response.status === 409) {
         setError("Este email já está em uso.");
       } else {
         setError("Não foi possível criar o funcionário.");
       }
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -78,10 +75,8 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
         <Select
           label="Papel (Permissão)"
           data={[
-            {
-              value: "funcionario",
-              label: "Funcionário (Acesso à própria agenda)",
-            },
+            { value: "funcionario", label: "Funcionário (Barbeiro)" },
+            { value: "recepcionista", label: "Recepcionista" },
             { value: "dono", label: "Dono (Acesso total)" },
           ]}
           value={role}

@@ -72,11 +72,12 @@ function AgendaPage() {
       await axios.put(
         `http://localhost:3001/agendamentos/${agendamentoId}`,
         { status: novoStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
       fetchAgendamentos();
     } catch (err) {
-      console.error("ERRO DETALHADO AO ATUALIZAR STATUS:", err);
       setError("Erro ao atualizar o status.");
     }
   };
@@ -88,6 +89,8 @@ function AgendaPage() {
         {error}
       </Alert>
     );
+
+  const rolesComVisaoCompleta = ["dono", "recepcionista"];
 
   const agendamentosFiltrados = agendamentos
     .filter((ag) => {
@@ -109,7 +112,9 @@ function AgendaPage() {
         })}
       </Table.Td>
       <Table.Td>{ag.nome_cliente}</Table.Td>
-      {user?.role === "dono" && <Table.Td>{ag.nome_profissional}</Table.Td>}
+      {rolesComVisaoCompleta.includes(user?.role) && (
+        <Table.Td>{ag.nome_profissional}</Table.Td>
+      )}
       <Table.Td>{ag.nome_servico}</Table.Td>
       <Table.Td>
         <Badge
@@ -119,9 +124,6 @@ function AgendaPage() {
           {ag.status}
         </Badge>
       </Table.Td>
-
-      {/* --- MUDANÇA APLICADA AQUI --- */}
-      {/* A coluna de ações só é renderizada se o filtro NÃO for 'concluido' */}
       {filtroStatus !== "concluido" && (
         <Table.Td>
           <Group>
@@ -148,18 +150,19 @@ function AgendaPage() {
     </Table.Tr>
   ));
 
-  // Lógica para o colspan dinâmico
-  let colSpan = 5;
-  if (user?.role === "dono") colSpan++;
-  if (filtroStatus === "concluido") colSpan--;
+  let colSpan = 4;
+  if (rolesComVisaoCompleta.includes(user?.role)) colSpan++;
+  if (filtroStatus !== "concluido") colSpan++;
 
   return (
     <div>
       <Group justify="space-between" mb="lg">
         <Title order={2}>Gestão da Agenda</Title>
-        <Button onClick={() => setIsModalOpen(true)}>
-          Adicionar Novo Agendamento
-        </Button>
+        {rolesComVisaoCompleta.includes(user?.role) && (
+          <Button onClick={() => setIsModalOpen(true)}>
+            Adicionar Novo Agendamento
+          </Button>
+        )}
       </Group>
 
       <Paper withBorder p="md" radius="md">
@@ -186,10 +189,11 @@ function AgendaPage() {
             <Table.Tr>
               <Table.Th>Data e Hora</Table.Th>
               <Table.Th>Cliente</Table.Th>
-              {user?.role === "dono" && <Table.Th>Profissional</Table.Th>}
-              <Table.Th>Serviço</Table.Th>
+              {rolesComVisaoCompleta.includes(user?.role) && (
+                <Table.Th>Profissional</Table.Th>
+              )}
+              <Table.Th>Serviço(s)</Table.Th>
               <Table.Th>Status</Table.Th>
-              {/* O cabeçalho da coluna também é condicional */}
               {filtroStatus !== "concluido" && <Table.Th>Ações</Table.Th>}
             </Table.Tr>
           </Table.Thead>
@@ -199,7 +203,7 @@ function AgendaPage() {
             ) : (
               <Table.Tr>
                 <Table.Td colSpan={colSpan} align="center">
-                  Nenhum agendamento encontrado para este filtro.
+                  Nenhum agendamento encontrado.
                 </Table.Td>
               </Table.Tr>
             )}

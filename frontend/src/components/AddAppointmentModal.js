@@ -17,6 +17,7 @@ import {
 import { IconAlertCircle } from "@tabler/icons-react";
 import useAuth from "../hooks/useAuth";
 
+// Helper para gerar os próximos dias
 const getNextDays = (numberOfDays) => {
   const days = [];
   const today = new Date();
@@ -30,6 +31,8 @@ const getNextDays = (numberOfDays) => {
 
 const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const { user } = useAuth();
+
+  // Estados do formulário
   const [servicos, setServicos] = useState([]);
   const [profissionais, setProfissionais] = useState([]);
   const [selectedProfissionalId, setSelectedProfissionalId] = useState("");
@@ -40,6 +43,8 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
+
+  // Estados de UI
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
@@ -60,17 +65,10 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
 
       const fetchInitialData = async () => {
         try {
-          const [servicosRes, equipeRes] = await Promise.all([
-            axios.get("http://localhost:3001/servicos", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            user?.role === "dono"
-              ? axios.get("http://localhost:3001/profissionais", {
-                  headers: { Authorization: `Bearer ${token}` },
-                })
-              : Promise.resolve({ data: [] }),
-          ]);
-
+          const servicosRes = await axios.get(
+            "http://localhost:3001/servicos",
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
           setServicos(
             servicosRes.data.map((s) => ({
               value: s.id,
@@ -79,16 +77,21 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             }))
           );
 
-          if (user?.role === "dono") {
-            const equipeCompleta = [
-              { id: user.id, nome: user.nome },
-              ...equipeRes.data,
-            ];
+          if (["dono", "recepcionista"].includes(user?.role)) {
+            const equipeRes = await axios.get(
+              "http://localhost:3001/profissionais",
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            // Adiciona o próprio usuário logado à lista de opções
+            const currentUser = { id: user.id, nome: `${user.nome} (Eu)` };
+            const otherMembers = equipeRes.data;
+            const equipeCompleta = [currentUser, ...otherMembers];
             setProfissionais(
               equipeCompleta.map((p) => ({ value: p.id, label: p.nome }))
             );
-            setSelectedProfissionalId(user.id);
+            setSelectedProfissionalId(user.id); // Pré-seleciona o usuário logado
           } else if (user) {
+            // Se for funcionário, ele só pode agendar para si mesmo
             setSelectedProfissionalId(user.id);
           }
         } catch (err) {
@@ -100,18 +103,20 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     }
   }, [opened, user]);
 
-  // Função manual para buscar horários, chamada explicitamente ao clicar em uma data
+  // Função manual para buscar horários, chamada ao clicar em uma data
   const handleDateChange = async (date) => {
     setSelectedDate(date);
     setSelectedSlot(null);
     if (!selectedService) return;
 
-    const professionalToQuery =
-      user?.role === "dono" ? selectedProfissionalId : user.id;
+    const professionalToQuery = ["dono", "recepcionista"].includes(user?.role)
+      ? selectedProfissionalId
+      : user.id;
     if (!professionalToQuery) return;
 
     setSlotsLoading(true);
     setAvailableSlots([]);
+    setError("");
     const dateString = date.toISOString().split("T")[0];
 
     try {
@@ -124,7 +129,6 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       );
 
       if (servicoSelecionado && horarioTrabalho) {
-        // Lógica de cálculo de horários
         const slots = [];
         const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
         const diaDaSemana = dayNames[date.getDay()];
@@ -211,9 +215,10 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       title="Adicionar Novo Agendamento"
       size="lg"
       centered
+      withinPortal
     >
       <Stack>
-        {user?.role === "dono" && (
+        {["dono", "recepcionista"].includes(user?.role) && (
           <Select
             label="Agendar Para o Profissional"
             placeholder="Escolha um profissional"
@@ -236,7 +241,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
           value={selectedService}
           onChange={(value) => {
             setSelectedService(value);
-            setSelectedDate(null);
+            setSelectedDate(new Date());
             setSelectedSlot(null);
           }}
           withinPortal

@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const authMiddleware = require("./middleware/auth");
 const checkRole = require("./middleware/checkRole");
+const authClienteMiddleware = require("./middleware/authCliente");
 
 const app = express();
 const port = 3001;
@@ -31,11 +32,12 @@ app.get("/publico/profissionais/:filialId", async (req, res) => {
   try {
     const { filialId } = req.params;
     const result = await db.query(
-      "SELECT id, nome FROM profissional WHERE filial_id = $1 ORDER BY nome",
+      "SELECT id, nome FROM profissional WHERE filial_id = $1 AND role != 'recepcionista' ORDER BY nome",
       [filialId]
     );
     res.status(200).json(result.rows);
   } catch (error) {
+    console.error("Erro ao buscar profissionais públicos:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
@@ -71,24 +73,38 @@ app.get("/publico/agenda/:profissionalId", async (req, res) => {
     const { data } = req.query;
     if (!data)
       return res.status(400).json({ message: "A data é obrigatória." });
+
+    // Busca os agendamentos do profissional selecionado para o dia
     const agendamentosResult = await db.query(
-      `SELECT data_hora_inicio, data_hora_fim FROM agendamento WHERE profissional_id = $1 AND data_hora_inicio::date = $2`,
+      `SELECT data_hora_inicio, data_hora_fim FROM carrinho_agendamento WHERE profissional_id = $1 AND data_hora_inicio::date = $2`,
       [profissionalId, data]
     );
-    const donoHorarioQuery = `SELECT p_dono.config_horarios FROM profissional p_func JOIN filial f ON p_func.filial_id = f.id JOIN profissional p_dono ON f.id = p_dono.filial_id WHERE p_func.id = $1 AND p_dono.role = 'dono';`;
+
+    // Busca a filial do profissional, depois o dono da filial, e então o horário de trabalho do dono.
+    const donoHorarioQuery = `
+            SELECT p_dono.config_horarios 
+            FROM profissional p_func
+            JOIN filial f ON p_func.filial_id = f.id
+            JOIN profissional p_dono ON f.id = p_dono.filial_id
+            WHERE p_func.id = $1 AND p_dono.role = 'dono';
+        `;
     const donoHorarioResult = await db.query(donoHorarioQuery, [
       profissionalId,
     ]);
-    if (donoHorarioResult.rows.length === 0)
+
+    if (donoHorarioResult.rows.length === 0) {
       return res.status(404).json({
         message:
           "Não foi possível encontrar o horário de trabalho para este profissional.",
       });
+    }
+
     res.status(200).json({
       horariosOcupados: agendamentosResult.rows,
       horarioTrabalho: donoHorarioResult.rows[0].config_horarios,
     });
   } catch (error) {
+    console.error("Erro ao buscar agenda pública:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
@@ -167,6 +183,148 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
     client.release();
   }
 });
+
+// =================================================================
+// --- ROTAS DE AUTENTICAÇÃO DO CLIENTE ---
+// =================================================================
+
+// =================================================================
+// --- Middleware "Espião" para Logar Todas as Requisições ---
+// =================================================================
+app.use((req, res, next) => {
+  console.log(
+    `[${new Date().toLocaleString("pt-BR")}] Recebida requisição: ${
+      req.method
+    } ${req.originalUrl}`
+  );
+  next(); // Passa a requisição para a próxima rota
+});
+
+// ROTA PARA CADASTRO DE NOVOS CLIENTES
+app.post("/clientes/cadastro", async (req, res) => {
+  try {
+    const { nome, email, telefone, senha } = req.body;
+    if (!nome || !email || !senha || !telefone) {
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são obrigatórios." });
+    }
+    const salt = await bcrypt.genSalt(10);
+    const senhaHash = await bcrypt.hash(senha, salt);
+    const queryText = `INSERT INTO cliente (nome_cliente, email_contato, telefone_contato, senha_hash) VALUES ($1, $2, $3, $4) RETURNING id, nome_cliente, email_contato;`;
+    const result = await db.query(queryText, [
+      nome,
+      email,
+      telefone,
+      senhaHash,
+    ]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("ERRO DETALHADO NO CADASTRO DE CLIENTE:", error); // Adicionando log detalhado aqui também
+    if (error.code === "23505") {
+      return res
+        .status(409)
+        .json({ message: "Este email já está cadastrado." });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
+
+// ROTA PARA LOGIN DE CLIENTES
+app.post("/clientes/login", async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    if (!email || !senha)
+      return res
+        .status(400)
+        .json({ message: "Email e senha são obrigatórios." });
+
+    const result = await db.query(
+      "SELECT * FROM cliente WHERE email_contato = $1",
+      [email]
+    );
+    if (result.rows.length === 0)
+      return res.status(401).json({ message: "Credenciais inválidas." });
+
+    const cliente = result.rows[0];
+    const senhaCorreta = await bcrypt.compare(senha, cliente.senha_hash);
+    if (!senhaCorreta)
+      return res.status(401).json({ message: "Credenciais inválidas." });
+
+    // Criamos um payload diferente para o cliente, para não confundir com o token do profissional
+    const payload = {
+      id: cliente.id,
+      nome: cliente.nome_cliente,
+      tipo: "cliente", // Identificador do tipo de token
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    }); // Token de cliente pode durar mais
+    res.status(200).json({ token });
+  } catch (error) {
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
+
+app.get(
+  "/clientes/meus-agendamentos",
+  authClienteMiddleware,
+  async (req, res) => {
+    try {
+      const clienteId = req.cliente.id;
+
+      const queryText = `
+            SELECT 
+                ca.id, ca.data_hora_inicio, ca.status, ca.preco_total,
+                p.nome as nome_profissional,
+                f.nome_filial,
+                (SELECT STRING_AGG(s.nome_servico, ', ') 
+                 FROM servico s 
+                 JOIN carrinho_servico cs ON s.id = cs.servico_id 
+                 WHERE cs.carrinho_id = ca.id) as nome_servico
+            FROM carrinho_agendamento ca
+            JOIN profissional p ON ca.profissional_id = p.id
+            JOIN filial f ON p.filial_id = f.id
+            WHERE ca.cliente_id = $1
+            ORDER BY ca.data_hora_inicio DESC;
+        `;
+
+      const result = await db.query(queryText, [clienteId]);
+      res.status(200).json(result.rows);
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
+
+// ROTA PROTEGIDA PARA O CLIENTE CANCELAR UM AGENDAMENTO
+app.delete(
+  "/clientes/agendamentos/:id",
+  authClienteMiddleware,
+  async (req, res) => {
+    try {
+      const clienteId = req.cliente.id;
+      const { id: agendamentoId } = req.params;
+
+      // A query garante que o cliente só pode deletar o seu próprio agendamento
+      const result = await db.query(
+        "DELETE FROM carrinho_agendamento WHERE id = $1 AND cliente_id = $2",
+        [agendamentoId, clienteId]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({
+          message: "Agendamento não encontrado ou não pertence a você.",
+        });
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
 
 // =================================================================
 // --- ROTAS DE AUTENTICAÇÃO E GESTÃO DE EQUIPE ---
@@ -393,6 +551,8 @@ app.get("/servicos", authMiddleware, async (req, res) => {
     if (role === "dono") {
       queryText =
         "SELECT * FROM servico WHERE profissional_id = $1 ORDER BY criado_em DESC";
+    } else if (role === "recepcionista") {
+      queryText = `SELECT s.* FROM servico s JOIN profissional p ON s.profissional_id = p.id WHERE p.filial_id = (SELECT filial_id FROM profissional WHERE id = $1) ORDER BY s.nome_servico;`;
     } else {
       queryText = `SELECT s.* FROM servico s JOIN profissional_servico ps ON s.id = ps.servico_id WHERE ps.profissional_id = $1 ORDER BY s.nome_servico;`;
     }
@@ -477,18 +637,29 @@ app.delete(
 app.get("/agendamentos", authMiddleware, async (req, res) => {
   try {
     const { id: profissional_id, role } = req.profissional;
-    const { data } = req.query;
-    let agendamentosResult;
     let queryText;
     let values;
+
+    // Base da query que busca os dados do carrinho e junta com outras tabelas
     const baseQuery = `
-          SELECT ca.id, ca.data_hora_inicio, ca.data_hora_fim, ca.status, c.nome_cliente, p.nome as nome_profissional,
-          (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
-          FROM carrinho_agendamento ca
-          JOIN cliente c ON ca.cliente_id = c.id
-          JOIN profissional p ON ca.profissional_id = p.id
-      `;
-    if (role === "dono") {
+        SELECT 
+            ca.id, 
+            ca.data_hora_inicio, 
+            ca.data_hora_fim, 
+            ca.status, 
+            c.nome_cliente, 
+            p.nome as nome_profissional,
+            (SELECT STRING_AGG(s.nome_servico, ', ') 
+             FROM servico s 
+             JOIN carrinho_servico cs ON s.id = cs.servico_id 
+             WHERE cs.carrinho_id = ca.id) as nome_servico
+        FROM carrinho_agendamento ca
+        JOIN cliente c ON ca.cliente_id = c.id
+        JOIN profissional p ON ca.profissional_id = p.id
+    `;
+
+    if (role === "dono" || role === "recepcionista") {
+      // Se for dono ou recepcionista, busca a filial e depois todos os agendamentos daquela filial
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [profissional_id]
@@ -498,17 +669,21 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
         return res
           .status(200)
           .json({ agendamentos: [], horarioTrabalho: null });
+
       queryText = `${baseQuery} WHERE p.filial_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [filial_id];
     } else {
+      // Se for funcionário, busca apenas os seus próprios agendamentos
       queryText = `${baseQuery} WHERE ca.profissional_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [profissional_id];
     }
-    agendamentosResult = await db.query(queryText, values);
+
+    const agendamentosResult = await db.query(queryText, values);
     const profissionalResult = await db.query(
       "SELECT config_horarios FROM profissional WHERE id = $1",
       [profissional_id]
     );
+
     res.status(200).json({
       agendamentos: agendamentosResult.rows,
       horarioTrabalho:
@@ -517,11 +692,13 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
           : null,
     });
   } catch (error) {
+    console.error("Erro ao listar agendamentos:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
 
 app.post("/agendamentos", authMiddleware, async (req, res) => {
+  const client = await db.getClient();
   try {
     const { id: logado_id, role } = req.profissional;
     const {
@@ -531,53 +708,92 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
       data_hora_inicio,
       agendado_para_id,
     } = req.body;
+
     const profissional_final_id =
-      role === "dono" ? agendado_para_id : logado_id;
+      role === "dono" || role === "recepcionista"
+        ? agendado_para_id
+        : logado_id;
+
     if (
       !servico_id ||
       !nome_cliente ||
       !telefone_cliente ||
       !data_hora_inicio ||
       !profissional_final_id
-    )
+    ) {
       return res
         .status(400)
         .json({ message: "Todos os campos são obrigatórios." });
+    }
+
+    await client.query("BEGIN");
+
+    // O agendamento manual cria um carrinho com um serviço só
+    const servicos_ids = [servico_id];
+
+    const servicosInfoResult = await client.query(
+      `SELECT id, duracao_minutos, preco FROM servico WHERE id = $1`,
+      [servico_id]
+    );
+    if (servicosInfoResult.rows.length === 0)
+      throw new Error("Serviço não encontrado.");
+
+    const duracao_total_minutos = servicosInfoResult.rows[0].duracao_minutos;
+    const preco_total = parseFloat(servicosInfoResult.rows[0].preco);
+    const dataInicio = new Date(data_hora_inicio);
+    const dataFim = new Date(
+      dataInicio.getTime() + duracao_total_minutos * 60000
+    );
+
     let cliente;
-    const clienteExistente = await db.query(
+    const clienteExistente = await client.query(
       "SELECT * FROM cliente WHERE telefone_contato = $1 AND profissional_id = $2",
       [telefone_cliente, profissional_final_id]
     );
     if (clienteExistente.rows.length > 0) {
       cliente = clienteExistente.rows[0];
     } else {
-      const novoCliente = await db.query(
+      const novoCliente = await client.query(
         "INSERT INTO cliente (nome_cliente, telefone_contato, profissional_id) VALUES ($1, $2, $3) RETURNING *",
         [nome_cliente, telefone_cliente, profissional_final_id]
       );
       cliente = novoCliente.rows[0];
     }
-    const servicoInfo = await db.query(
-      "SELECT duracao_minutos FROM servico WHERE id = $1",
-      [servico_id]
-    );
-    if (servicoInfo.rows.length === 0)
-      return res.status(404).json({ message: "Serviço não encontrado." });
-    const duracao = servicoInfo.rows[0].duracao_minutos;
-    const dataInicio = new Date(data_hora_inicio);
-    const dataFim = new Date(dataInicio.getTime() + duracao * 60000);
-    const queryText = `INSERT INTO agendamento (data_hora_inicio, data_hora_fim, profissional_id, cliente_id, servico_id) VALUES ($1, $2, $3, $4, $5) RETURNING *;`;
-    const values = [
+
+    const carrinhoQuery = `INSERT INTO carrinho_agendamento (data_hora_inicio, data_hora_fim, preco_total, duracao_total_minutos, profissional_id, cliente_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;`;
+    const carrinhoResult = await client.query(carrinhoQuery, [
       dataInicio.toISOString(),
       dataFim.toISOString(),
+      preco_total,
+      duracao_total_minutos,
       profissional_final_id,
       cliente.id,
-      servico_id,
-    ];
-    const result = await db.query(queryText, values);
-    res.status(201).json(result.rows[0]);
+    ]);
+    const carrinho_id = carrinhoResult.rows[0].id;
+
+    const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
+    await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
+
+    await client.query("COMMIT");
+
+    // Retorna um objeto completo para facilitar a atualização no frontend
+    const profissionalAgendado = await client.query(
+      "SELECT nome FROM profissional WHERE id = $1",
+      [profissional_final_id]
+    );
+    const agendamentoCriado = {
+      ...carrinhoResult.rows[0],
+      nome_cliente: cliente.nome_cliente,
+      nome_servico: servicosInfoResult.rows[0].nome_servico,
+      nome_profissional: profissionalAgendado.rows[0].nome,
+    };
+    res.status(201).json(agendamentoCriado);
   } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao criar agendamento manual:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
+  } finally {
+    client.release();
   }
 });
 
@@ -592,7 +808,7 @@ app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
         .json({ message: "O campo status é obrigatório para atualização." });
     let queryText;
     let values;
-    if (role === "dono") {
+    if (role === "dono" || role === "recepcionista") {
       queryText = `UPDATE carrinho_agendamento SET status = $1 WHERE id = $2 AND profissional_id IN (SELECT id FROM profissional WHERE filial_id = (SELECT filial_id FROM profissional WHERE id = $3)) RETURNING *;`;
       values = [status, agendamento_id, profissional_id];
     } else {
@@ -617,7 +833,7 @@ app.delete("/agendamentos/:id", authMiddleware, async (req, res) => {
     const { id: profissional_id, role } = req.profissional;
     let queryText;
     let values;
-    if (role === "dono") {
+    if (role === "dono" || role === "recepcionista") {
       queryText = `DELETE FROM carrinho_agendamento WHERE id = $1 AND profissional_id IN (SELECT id FROM profissional WHERE filial_id = (SELECT filial_id FROM profissional WHERE id = $2));`;
       values = [agendamento_id, profissional_id];
     } else {
@@ -682,7 +898,7 @@ app.put(
   }
 );
 
-// --- Relatórios (COM AS CORREÇÕES) ---
+// --- Relatórios ---
 app.get(
   "/relatorios/servicos-realizados",
   authMiddleware,
@@ -691,30 +907,14 @@ app.get(
     try {
       const { id: dono_id } = req.profissional;
       const { mes, ano } = req.query;
-
       const filialSubQuery = `(SELECT filial_id FROM profissional WHERE id = $1)`;
-
-      let queryText = `
-        SELECT 
-            ca.id, 
-            ca.data_hora_inicio, 
-            c.nome_cliente, 
-            p.nome as nome_profissional,
-            ca.preco_total as preco, -- Usamos o preço total do carrinho
-            (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
-        FROM carrinho_agendamento ca
-        JOIN cliente c ON ca.cliente_id = c.id
-        JOIN profissional p ON ca.profissional_id = p.id
-        WHERE ca.status = 'concluido' AND p.filial_id = ${filialSubQuery}
-      `;
+      let queryText = `SELECT ca.id, ca.data_hora_inicio, c.nome_cliente, p.nome as nome_profissional, ca.preco_total as preco, (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico FROM carrinho_agendamento ca JOIN cliente c ON ca.cliente_id = c.id JOIN profissional p ON ca.profissional_id = p.id WHERE ca.status = 'concluido' AND p.filial_id = ${filialSubQuery}`;
       const values = [dono_id];
-
       if (mes && ano) {
         queryText += ` AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3`;
         values.push(mes, ano);
       }
       queryText += ` ORDER BY ca.data_hora_inicio DESC;`;
-
       const result = await db.query(queryText, values);
       res.status(200).json(result.rows);
     } catch (error) {
@@ -730,35 +930,17 @@ app.get(
   async (req, res) => {
     try {
       const { id: dono_id } = req.profissional;
-      const { mes, ano, profissionalId } = req.query; // Adicionamos profissionalId
+      const { mes, ano, profissionalId } = req.query;
       if (!mes || !ano)
         return res.status(400).json({ message: "Mês e ano são obrigatórios." });
-
       const filialSubQuery = `(SELECT filial_id FROM profissional WHERE id = $1)`;
-
-      let queryText = `
-        SELECT 
-            s.nome_servico, 
-            SUM(s.preco) as faturamento_total,
-            COUNT(s.id) as quantidade
-        FROM carrinho_agendamento ca
-        JOIN carrinho_servico cs ON ca.id = cs.carrinho_id
-        JOIN servico s ON cs.servico_id = s.id
-        WHERE ca.status = 'concluido'
-        AND ca.profissional_id IN (SELECT id FROM profissional WHERE filial_id = ${filialSubQuery})
-        AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 
-        AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3 
-      `;
+      let queryText = `SELECT s.nome_servico, SUM(s.preco) as faturamento_total, COUNT(s.id) as quantidade FROM carrinho_agendamento ca JOIN carrinho_servico cs ON ca.id = cs.carrinho_id JOIN servico s ON cs.servico_id = s.id WHERE ca.status = 'concluido' AND ca.profissional_id IN (SELECT id FROM profissional WHERE filial_id = ${filialSubQuery}) AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3`;
       const values = [dono_id, mes, ano];
-
-      // Se um profissional específico for selecionado, adiciona o filtro
       if (profissionalId) {
         queryText += ` AND ca.profissional_id = $4`;
         values.push(profissionalId);
       }
-
       queryText += ` GROUP BY s.nome_servico ORDER BY faturamento_total DESC;`;
-
       const result = await db.query(queryText, values);
       res.status(200).json(result.rows);
     } catch (error) {
@@ -772,6 +954,6 @@ app.get(
 // =================================================================
 app.listen(port, () => {
   console.log(
-    `🚀🚀🚀 SERVIDOR ATUALIZADO (com correções de bugs) rodando na porta http://localhost:${port}`
+    `🚀🚀🚀 SERVIDOR COM LOGGER ATIVO rodando na porta http://localhost:${port}`
   );
 });
