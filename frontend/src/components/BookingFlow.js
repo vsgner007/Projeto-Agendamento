@@ -77,6 +77,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
+  const [emailCliente, setEmailCliente] = useState("");
 
   // Verifica se há um cliente logado para preencher os dados
   useEffect(() => {
@@ -85,7 +86,8 @@ const BookingFlow = ({ onBookingSuccess }) => {
       try {
         const decoded = jwtDecode(token);
         setNomeCliente(decoded.nome || "");
-        // Assumimos que o token não contém o telefone, então não preenchemos.
+        // Futuramente, quando o token do cliente tiver o email, esta linha vai funcionar:
+        // setEmailCliente(decoded.email || '');
       } catch (e) {
         console.error("Token de cliente inválido", e);
       }
@@ -125,6 +127,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
       .catch(() => setError("Não foi possível carregar as filiais."))
       .finally(() => setLoading((prev) => ({ ...prev, filiais: false })));
   }, []);
+
   useEffect(() => {
     if (selectedFilial) {
       setLoading((prev) => ({ ...prev, profissionais: true }));
@@ -137,6 +140,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
         );
     }
   }, [selectedFilial]);
+
   useEffect(() => {
     if (selectedProfissional) {
       setLoading((prev) => ({ ...prev, servicos: true }));
@@ -164,6 +168,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
           servicos_ids: selectedServices.map((s) => s.id),
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
+          email_cliente: emailCliente,
           data_hora_inicio: selectedSlot.toISOString(),
         }
       );
@@ -354,25 +359,33 @@ const BookingFlow = ({ onBookingSuccess }) => {
         <Paper withBorder p="md" mt="md" radius="md">
           <Title order={4}>Confirme seus dados</Title>
           <form onSubmit={handleBookingSubmit}>
-            <TextInput
-              label="Seu Nome Completo"
-              placeholder="Nome Sobrenome"
-              value={nomeCliente}
-              onChange={(e) => setNomeCliente(e.currentTarget.value)}
-              required
-              mt="md"
-            />
-            <TextInput
-              label="Seu Telefone (WhatsApp)"
-              placeholder="(XX) XXXXX-XXXX"
-              value={telefoneCliente}
-              onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
-              required
-              mt="md"
-            />
-            <Button fullWidth mt="xl" type="submit" loading={loading.booking}>
-              Confirmar Agendamento
-            </Button>
+            <Stack mt="md">
+              <TextInput
+                label="Seu Nome Completo"
+                placeholder="Nome Sobrenome"
+                value={nomeCliente}
+                onChange={(e) => setNomeCliente(e.currentTarget.value)}
+                required
+              />
+              <TextInput
+                label="Seu Email"
+                placeholder="email@exemplo.com"
+                value={emailCliente}
+                onChange={(e) => setEmailCliente(e.currentTarget.value)}
+                required
+                type="email"
+              />
+              <TextInput
+                label="Seu Telefone (WhatsApp)"
+                placeholder="(XX) XXXXX-XXXX"
+                value={telefoneCliente}
+                onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
+                required
+              />
+              <Button fullWidth mt="md" type="submit" loading={loading.booking}>
+                Confirmar Agendamento
+              </Button>
+            </Stack>
           </form>
         </Paper>
       )}

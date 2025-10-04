@@ -114,17 +114,30 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { profissionalId } = req.params;
-    const { servicos_ids, nome_cliente, telefone_cliente, data_hora_inicio } =
-      req.body;
+    // 1. Recebe o email_cliente do corpo da requisição
+    const {
+      servicos_ids,
+      nome_cliente,
+      telefone_cliente,
+      email_cliente,
+      data_hora_inicio,
+    } = req.body;
+
     if (
       !servicos_ids ||
       servicos_ids.length === 0 ||
       !nome_cliente ||
       !telefone_cliente ||
+      !email_cliente ||
       !data_hora_inicio
     ) {
-      throw new Error("Todos os campos são obrigatórios.");
+      return res
+        .status(400)
+        .json({
+          message: "Todos os campos, incluindo email, são obrigatórios.",
+        });
     }
+
     const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
     const servicosInfoResult = await client.query(servicosInfoQuery, [
       servicos_ids,
@@ -132,6 +145,7 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
     if (servicosInfoResult.rows.length !== servicos_ids.length) {
       throw new Error("Um ou mais serviços não foram encontrados.");
     }
+
     const duracao_total_minutos = servicosInfoResult.rows.reduce(
       (acc, s) => acc + s.duracao_minutos,
       0
@@ -144,20 +158,24 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
     const dataFim = new Date(
       dataInicio.getTime() + duracao_total_minutos * 60000
     );
+
+    // 2. Procura pelo cliente usando o EMAIL como identificador principal
     let cliente;
     const clienteExistente = await client.query(
-      "SELECT * FROM cliente WHERE telefone_contato = $1 AND profissional_id = $2",
-      [telefone_cliente, profissionalId]
+      "SELECT * FROM cliente WHERE email_contato = $1",
+      [email_cliente]
     );
     if (clienteExistente.rows.length > 0) {
       cliente = clienteExistente.rows[0];
     } else {
+      // 3. Se não existe, cria um novo cliente com o email
       const novoCliente = await client.query(
-        "INSERT INTO cliente (nome_cliente, telefone_contato, profissional_id) VALUES ($1, $2, $3) RETURNING *",
-        [nome_cliente, telefone_cliente, profissionalId]
+        "INSERT INTO cliente (nome_cliente, telefone_contato, email_contato) VALUES ($1, $2, $3) RETURNING *",
+        [nome_cliente, telefone_cliente, email_cliente]
       );
       cliente = novoCliente.rows[0];
     }
+
     const carrinhoQuery = `INSERT INTO carrinho_agendamento (data_hora_inicio, data_hora_fim, preco_total, duracao_total_minutos, profissional_id, cliente_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
     const carrinhoResult = await client.query(carrinhoQuery, [
       dataInicio.toISOString(),
@@ -168,16 +186,19 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
       cliente.id,
     ]);
     const carrinho_id = carrinhoResult.rows[0].id;
+
     const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
     for (const servico_id of servicos_ids) {
       await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
     }
+
     await client.query("COMMIT");
     res
       .status(201)
       .json({ message: "Agendamento criado com sucesso.", carrinho_id });
   } catch (error) {
     await client.query("ROLLBACK");
+    console.error("Erro ao criar agendamento público:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   } finally {
     client.release();

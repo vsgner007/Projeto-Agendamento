@@ -45,7 +45,9 @@ function AgendaPage() {
     fetchAgendamentos();
   }, []);
 
-  const handleAppointmentCreated = () => fetchAgendamentos();
+  const handleAppointmentCreated = () => {
+    fetchAgendamentos();
+  };
 
   const handleCancelAppointment = async (agendamentoId) => {
     if (!window.confirm("Tem certeza que deseja cancelar este agendamento?"))
@@ -72,9 +74,7 @@ function AgendaPage() {
       await axios.put(
         `http://localhost:3001/agendamentos/${agendamentoId}`,
         { status: novoStatus },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       fetchAgendamentos();
     } catch (err) {
@@ -112,6 +112,7 @@ function AgendaPage() {
         })}
       </Table.Td>
       <Table.Td>{ag.nome_cliente}</Table.Td>
+      {/* Célula com o nome do profissional (condicional) */}
       {rolesComVisaoCompleta.includes(user?.role) && (
         <Table.Td>{ag.nome_profissional}</Table.Td>
       )}
@@ -150,6 +151,7 @@ function AgendaPage() {
     </Table.Tr>
   ));
 
+  // Lógica para o colspan dinâmico
   let colSpan = 4;
   if (rolesComVisaoCompleta.includes(user?.role)) colSpan++;
   if (filtroStatus !== "concluido") colSpan++;
@@ -189,6 +191,7 @@ function AgendaPage() {
             <Table.Tr>
               <Table.Th>Data e Hora</Table.Th>
               <Table.Th>Cliente</Table.Th>
+              {/* Cabeçalho da nova coluna (condicional) */}
               {rolesComVisaoCompleta.includes(user?.role) && (
                 <Table.Th>Profissional</Table.Th>
               )}
