@@ -131,11 +131,9 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
       !email_cliente ||
       !data_hora_inicio
     ) {
-      return res
-        .status(400)
-        .json({
-          message: "Todos os campos, incluindo email, são obrigatórios.",
-        });
+      return res.status(400).json({
+        message: "Todos os campos, incluindo email, são obrigatórios.",
+      });
     }
 
     const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
@@ -252,6 +250,8 @@ app.post("/clientes/cadastro", async (req, res) => {
 });
 
 // ROTA PARA LOGIN DE CLIENTES
+// dentro de backend/index.js
+
 app.post("/clientes/login", async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -268,20 +268,25 @@ app.post("/clientes/login", async (req, res) => {
       return res.status(401).json({ message: "Credenciais inválidas." });
 
     const cliente = result.rows[0];
+    if (!cliente.senha_hash)
+      return res.status(401).json({ message: "Credenciais inválidas." });
+
     const senhaCorreta = await bcrypt.compare(senha, cliente.senha_hash);
     if (!senhaCorreta)
       return res.status(401).json({ message: "Credenciais inválidas." });
 
-    // Criamos um payload diferente para o cliente, para não confundir com o token do profissional
+    // --- CORREÇÃO APLICADA AQUI ---
     const payload = {
       id: cliente.id,
       nome: cliente.nome_cliente,
-      tipo: "cliente", // Identificador do tipo de token
+      email: cliente.email_contato,
+      telefone: cliente.telefone_contato, // Adicionamos o telefone
+      tipo: "cliente",
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "7d",
-    }); // Token de cliente pode durar mais
+    });
     res.status(200).json({ token });
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -661,7 +666,7 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
     let queryText;
     let values;
 
-    // Base da query que busca os dados do carrinho e junta com outras tabelas
+    // Query base que busca os dados, agora incluindo o telefone do cliente
     const baseQuery = `
         SELECT 
             ca.id, 
@@ -669,18 +674,15 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
             ca.data_hora_fim, 
             ca.status, 
             c.nome_cliente, 
+            c.telefone_contato, -- <-- CAMPO ADICIONADO AQUI
             p.nome as nome_profissional,
-            (SELECT STRING_AGG(s.nome_servico, ', ') 
-             FROM servico s 
-             JOIN carrinho_servico cs ON s.id = cs.servico_id 
-             WHERE cs.carrinho_id = ca.id) as nome_servico
+            (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
         FROM carrinho_agendamento ca
         JOIN cliente c ON ca.cliente_id = c.id
         JOIN profissional p ON ca.profissional_id = p.id
     `;
 
     if (role === "dono" || role === "recepcionista") {
-      // Se for dono ou recepcionista, busca a filial e depois todos os agendamentos daquela filial
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [profissional_id]
@@ -690,11 +692,9 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
         return res
           .status(200)
           .json({ agendamentos: [], horarioTrabalho: null });
-
       queryText = `${baseQuery} WHERE p.filial_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [filial_id];
     } else {
-      // Se for funcionário, busca apenas os seus próprios agendamentos
       queryText = `${baseQuery} WHERE ca.profissional_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [profissional_id];
     }

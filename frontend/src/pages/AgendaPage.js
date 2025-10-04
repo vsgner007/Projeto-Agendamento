@@ -112,7 +112,7 @@ function AgendaPage() {
         })}
       </Table.Td>
       <Table.Td>{ag.nome_cliente}</Table.Td>
-      {/* Célula com o nome do profissional (condicional) */}
+      <Table.Td>{ag.telefone_contato}</Table.Td>
       {rolesComVisaoCompleta.includes(user?.role) && (
         <Table.Td>{ag.nome_profissional}</Table.Td>
       )}
@@ -151,8 +151,7 @@ function AgendaPage() {
     </Table.Tr>
   ));
 
-  // Lógica para o colspan dinâmico
-  let colSpan = 4;
+  let colSpan = 5;
   if (rolesComVisaoCompleta.includes(user?.role)) colSpan++;
   if (filtroStatus !== "concluido") colSpan++;
 
@@ -185,13 +184,13 @@ function AgendaPage() {
           : "Histórico de Serviços Finalizados"}
       </Title>
 
-      <Table.ScrollContainer minWidth={900}>
+      <Table.ScrollContainer minWidth={1000}>
         <Table striped withTableBorder withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Data e Hora</Table.Th>
               <Table.Th>Cliente</Table.Th>
-              {/* Cabeçalho da nova coluna (condicional) */}
+              <Table.Th>Telefone</Table.Th>
               {rolesComVisaoCompleta.includes(user?.role) && (
                 <Table.Th>Profissional</Table.Th>
               )}
@@ -206,7 +205,7 @@ function AgendaPage() {
             ) : (
               <Table.Tr>
                 <Table.Td colSpan={colSpan} align="center">
-                  Nenhum agendamento encontrado.
+                  Nenhum agendamento encontrado para este filtro.
                 </Table.Td>
               </Table.Tr>
             )}

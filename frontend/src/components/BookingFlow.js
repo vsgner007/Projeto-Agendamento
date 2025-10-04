@@ -86,8 +86,8 @@ const BookingFlow = ({ onBookingSuccess }) => {
       try {
         const decoded = jwtDecode(token);
         setNomeCliente(decoded.nome || "");
-        // Futuramente, quando o token do cliente tiver o email, esta linha vai funcionar:
-        // setEmailCliente(decoded.email || '');
+        setEmailCliente(decoded.email || "");
+        setTelefoneCliente(decoded.telefone || "");
       } catch (e) {
         console.error("Token de cliente inválido", e);
       }
@@ -240,8 +240,20 @@ const BookingFlow = ({ onBookingSuccess }) => {
               })}
             </Text>
           </Paper>
-          <Button fullWidth mt="xl" onClick={() => window.location.reload()}>
-            Fazer um Novo Agendamento
+          <Button
+            fullWidth
+            mt="xl"
+            onClick={() => {
+              if (onBookingSuccess) {
+                onBookingSuccess();
+              } else {
+                window.location.reload();
+              }
+            }}
+          >
+            {onBookingSuccess
+              ? "Ver Meus Agendamentos"
+              : "Fazer um Novo Agendamento"}
           </Button>
         </Paper>
       </Container>
