@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import AddAppointmentModal from "../components/AddAppointmentModal";
+import AdminAppointmentModal from "../components/AdminAppointmentModal"; // Usando o novo modal
 import {
   Title,
   Table,
@@ -112,7 +112,6 @@ function AgendaPage() {
         })}
       </Table.Td>
       <Table.Td>{ag.nome_cliente}</Table.Td>
-      <Table.Td>{ag.telefone_contato}</Table.Td>
       {rolesComVisaoCompleta.includes(user?.role) && (
         <Table.Td>{ag.nome_profissional}</Table.Td>
       )}
@@ -151,7 +150,7 @@ function AgendaPage() {
     </Table.Tr>
   ));
 
-  let colSpan = 5;
+  let colSpan = 4;
   if (rolesComVisaoCompleta.includes(user?.role)) colSpan++;
   if (filtroStatus !== "concluido") colSpan++;
 
@@ -165,7 +164,6 @@ function AgendaPage() {
           </Button>
         )}
       </Group>
-
       <Paper withBorder p="md" radius="md">
         <SegmentedControl
           value={filtroStatus}
@@ -177,20 +175,17 @@ function AgendaPage() {
           fullWidth
         />
       </Paper>
-
       <Title order={3} mt="xl" mb="md">
         {filtroStatus === "agendado"
           ? "Próximos Compromissos"
           : "Histórico de Serviços Finalizados"}
       </Title>
-
-      <Table.ScrollContainer minWidth={1000}>
+      <Table.ScrollContainer minWidth={900}>
         <Table striped withTableBorder withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Data e Hora</Table.Th>
               <Table.Th>Cliente</Table.Th>
-              <Table.Th>Telefone</Table.Th>
               {rolesComVisaoCompleta.includes(user?.role) && (
                 <Table.Th>Profissional</Table.Th>
               )}
@@ -205,7 +200,7 @@ function AgendaPage() {
             ) : (
               <Table.Tr>
                 <Table.Td colSpan={colSpan} align="center">
-                  Nenhum agendamento encontrado para este filtro.
+                  Nenhum agendamento encontrado.
                 </Table.Td>
               </Table.Tr>
             )}
@@ -213,7 +208,7 @@ function AgendaPage() {
         </Table>
       </Table.ScrollContainer>
 
-      <AddAppointmentModal
+      <AdminAppointmentModal
         opened={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onAppointmentCreated={handleAppointmentCreated}

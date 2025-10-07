@@ -13,11 +13,11 @@ import {
   UnstyledButton,
   Alert,
   Stack,
+  Checkbox,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import useAuth from "../hooks/useAuth";
 
-// Helper para gerar os próximos dias
 const getNextDays = (numberOfDays) => {
   const days = [];
   const today = new Date();
@@ -29,85 +29,83 @@ const getNextDays = (numberOfDays) => {
   return days;
 };
 
-const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
+const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const { user } = useAuth();
 
-  // Estados do formulário
-  const [servicos, setServicos] = useState([]);
   const [profissionais, setProfissionais] = useState([]);
+  const [servicos, setServicos] = useState([]);
   const [selectedProfissionalId, setSelectedProfissionalId] = useState("");
-  const [selectedService, setSelectedService] = useState(null);
+  const [selectedServices, setSelectedServices] = useState([]);
   const [days, setDays] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
+  const [emailCliente, setEmailCliente] = useState("");
 
-  // Estados de UI
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loadingData, setLoadingData] = useState(true);
 
-  // Efeito ÚNICO para buscar dados iniciais quando o modal abre
+  // Efeito para buscar dados iniciais
   useEffect(() => {
     if (opened) {
-      // Reseta todos os estados para um formulário limpo
-      setSelectedService(null);
+      // Reseta tudo ao abrir
+      setSelectedServices([]);
       setSelectedDate(null);
       setSelectedSlot(null);
       setNomeCliente("");
       setTelefoneCliente("");
+      setEmailCliente("");
       setError("");
       setDays(getNextDays(14));
+      setLoadingData(true);
 
       const token = localStorage.getItem("token");
 
       const fetchInitialData = async () => {
         try {
-          const servicosRes = await axios.get(
-            "http://localhost:3001/servicos",
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          setServicos(
-            servicosRes.data.map((s) => ({
-              value: s.id,
-              label: s.nome_servico,
-              duracao: s.duracao_minutos,
-            }))
-          );
+          const [servicosRes, equipeRes] = await Promise.all([
+            axios.get("http://localhost:3001/servicos", {
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            ["dono", "recepcionista"].includes(user?.role)
+              ? axios.get("http://localhost:3001/profissionais", {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+              : Promise.resolve({ data: [] }),
+          ]);
+
+          setServicos(servicosRes.data);
 
           if (["dono", "recepcionista"].includes(user?.role)) {
-            const equipeRes = await axios.get(
-              "http://localhost:3001/profissionais",
-              { headers: { Authorization: `Bearer ${token}` } }
+            const equipeFiltrada = equipeRes.data.filter(
+              (p) => p.role === "dono" || p.role === "funcionario"
             );
-            // Adiciona o próprio usuário logado à lista de opções
-            const currentUser = { id: user.id, nome: `${user.nome} (Eu)` };
-            const otherMembers = equipeRes.data;
-            const equipeCompleta = [currentUser, ...otherMembers];
             setProfissionais(
-              equipeCompleta.map((p) => ({ value: p.id, label: p.nome }))
+              equipeFiltrada.map((p) => ({ value: p.id, label: p.nome }))
             );
-            setSelectedProfissionalId(user.id); // Pré-seleciona o usuário logado
+            // Não pré-seleciona mais para evitar o bug de 'voltar'
           } else if (user) {
-            // Se for funcionário, ele só pode agendar para si mesmo
             setSelectedProfissionalId(user.id);
           }
         } catch (err) {
-          setError("Não foi possível carregar os dados necessários.");
+          setError("Não foi possível carregar os dados.");
+        } finally {
+          setLoadingData(false);
         }
       };
-
       fetchInitialData();
     }
   }, [opened, user]);
 
-  // Função manual para buscar horários, chamada ao clicar em uma data
+  // Função para buscar horários, chamada ao clicar em uma data
   const handleDateChange = async (date) => {
     setSelectedDate(date);
     setSelectedSlot(null);
-    if (!selectedService) return;
+    if (selectedServices.length === 0) return;
 
     const professionalToQuery = ["dono", "recepcionista"].includes(user?.role)
       ? selectedProfissionalId
@@ -124,31 +122,29 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
         `http://localhost:3001/publico/agenda/${professionalToQuery}?data=${dateString}`
       );
       const { horariosOcupados, horarioTrabalho } = response.data;
-      const servicoSelecionado = servicos.find(
-        (s) => s.value === selectedService
-      );
 
-      if (servicoSelecionado && horarioTrabalho) {
+      const duracaoTotal = selectedServices.reduce((total, serviceId) => {
+        const servico = servicos.find((s) => s.id === serviceId);
+        return total + (servico ? servico.duracao_minutos : 0);
+      }, 0);
+
+      if (duracaoTotal > 0 && horarioTrabalho) {
         const slots = [];
         const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
         const diaDaSemana = dayNames[date.getDay()];
         const horarioDoDia = horarioTrabalho[diaDaSemana];
-
         if (horarioDoDia) {
           const [inicioStr, fimStr] = horarioDoDia.split("-");
           const [inicioHora, inicioMin] = inicioStr.split(":").map(Number);
           const [fimHora, fimMin] = fimStr.split(":").map(Number);
-
           const diaInicio = new Date(date);
           diaInicio.setHours(inicioHora, inicioMin, 0, 0);
-
           const diaFim = new Date(date);
           diaFim.setHours(fimHora, fimMin, 0, 0);
-
           let slotAtual = new Date(diaInicio);
           while (slotAtual < diaFim) {
             const slotFim = new Date(
-              slotAtual.getTime() + servicoSelecionado.duracao * 60000
+              slotAtual.getTime() + duracaoTotal * 60000
             );
             if (slotFim > diaFim) break;
             const isOcupado = horariosOcupados.some(
@@ -165,7 +161,7 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
         setAvailableSlots(slots);
       }
     } catch (e) {
-      setError("Não foi possível buscar os horários disponíveis.");
+      setError("Não foi possível buscar os horários.");
     } finally {
       setSlotsLoading(false);
     }
@@ -174,10 +170,11 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const handleSubmit = async () => {
     setError("");
     if (
-      !selectedService ||
+      !selectedServices.length ||
       !selectedSlot ||
       !nomeCliente ||
       !telefoneCliente ||
+      !emailCliente ||
       !selectedProfissionalId
     ) {
       setError("Todos os campos devem ser preenchidos.");
@@ -189,9 +186,10 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       await axios.post(
         "http://localhost:3001/agendamentos",
         {
-          servico_id: selectedService,
+          servicos_ids: selectedServices,
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
+          email_cliente: emailCliente,
           data_hora_inicio: selectedSlot.toISOString(),
           agendado_para_id: selectedProfissionalId,
         },
@@ -208,6 +206,21 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
 
   const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+  if (loadingData) {
+    return (
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        title="Adicionar Novo Agendamento"
+        centered
+      >
+        <Center>
+          <Loader />
+        </Center>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       opened={opened}
@@ -215,42 +228,45 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       title="Adicionar Novo Agendamento"
       size="lg"
       centered
-      withinPortal
     >
       <Stack>
         {["dono", "recepcionista"].includes(user?.role) && (
           <Select
-            label="Agendar Para o Profissional"
-            placeholder="Escolha um profissional"
+            label="Profissional"
+            placeholder="Selecione um profissional"
             data={profissionais}
             value={selectedProfissionalId}
             onChange={(value) => {
               setSelectedProfissionalId(value);
-              setSelectedService(null);
+              setSelectedServices([]);
               setSelectedDate(null);
               setSelectedSlot(null);
             }}
-            withinPortal
+            comboboxProps={{ dropdown: { style: { zIndex: 2001 } } }}
             required
           />
         )}
-        <Select
-          label="Serviço"
-          placeholder="Escolha um serviço"
-          data={servicos}
-          value={selectedService}
-          onChange={(value) => {
-            setSelectedService(value);
-            setSelectedDate(new Date());
+
+        <Checkbox.Group
+          label="Serviço(s)"
+          description="Selecione um ou mais serviços"
+          value={selectedServices}
+          onChange={(values) => {
+            setSelectedServices(values);
+            setSelectedDate(null);
             setSelectedSlot(null);
           }}
-          withinPortal
-          required
-        />
+        >
+          <Group mt="xs">
+            {servicos.map((s) => (
+              <Checkbox key={s.id} value={s.id} label={s.nome_servico} />
+            ))}
+          </Group>
+        </Checkbox.Group>
 
-        {selectedService && (
+        {selectedServices.length > 0 && (
           <div>
-            <Text size="sm" fw={500} mb="sm">
+            <Text size="sm" fw={500} mb="sm" mt="md">
               Data e Hora
             </Text>
             <Group
@@ -284,7 +300,6 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
                 );
               })}
             </Group>
-
             {slotsLoading ? (
               <Center mt="md">
                 <Loader />
@@ -333,7 +348,15 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
               required
             />
             <TextInput
-              placeholder="(XX) XXXXX-XXXX"
+              placeholder="Email do cliente"
+              value={emailCliente}
+              onChange={(e) => setEmailCliente(e.currentTarget.value)}
+              mt="sm"
+              required
+              type="email"
+            />
+            <TextInput
+              placeholder="Telefone do cliente"
               value={telefoneCliente}
               onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
               mt="sm"
@@ -360,7 +383,13 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
           <Button
             onClick={handleSubmit}
             loading={submitLoading}
-            disabled={!nomeCliente || !telefoneCliente || !selectedSlot}
+            disabled={
+              !nomeCliente ||
+              !telefoneCliente ||
+              !emailCliente ||
+              !selectedSlot ||
+              !selectedServices.length
+            }
           >
             Confirmar Agendamento
           </Button>
@@ -370,4 +399,4 @@ const AddAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   );
 };
 
-export default AddAppointmentModal;
+export default AdminAppointmentModal;

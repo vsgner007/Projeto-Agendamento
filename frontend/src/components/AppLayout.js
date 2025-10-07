@@ -14,26 +14,20 @@ import {
   IconChartPie,
   IconSettings,
   IconUsers,
+  IconAddressBook,
 } from "@tabler/icons-react";
-import useAuth from "../hooks/useAuth"; // Importa nosso hook de autenticação
+import useAuth from "../hooks/useAuth";
 
 const AppLayout = () => {
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
-  const { user } = useAuth(); // Usa o hook para pegar os dados do usuário
-
-  // --- NOSSO SEGUNDO ESPIÃO ---
-  // Vamos ver o que o hook está retornando
-  console.log("DADOS DO USUÁRIO NO AppLayout:", user);
-  console.log("O 'role' do usuário é:", user?.role);
-  // -----------------------------
+  const { user } = useAuth();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     navigate("/login");
   };
 
-  // Links base, visíveis para todos
   const navLinks = [
     {
       icon: <IconClipboardList size="1rem" />,
@@ -43,11 +37,15 @@ const AppLayout = () => {
     { icon: <IconCalendar size="1rem" />, label: "Agenda", path: "/agenda" },
   ];
 
-  // Lógica condicional com logs para sabermos a decisão
+  if (user?.role === "dono" || user?.role === "recepcionista") {
+    navLinks.push({
+      icon: <IconAddressBook size="1rem" />,
+      label: "Clientes",
+      path: "/clientes",
+    });
+  }
+
   if (user?.role === "dono") {
-    console.log(
-      "CONDIÇÃO VERDADEIRA: O usuário é 'dono'. Adicionando links de admin."
-    );
     navLinks.push(
       {
         icon: <IconGauge size="1rem" />,
@@ -66,21 +64,13 @@ const AppLayout = () => {
         path: "/configuracoes",
       }
     );
-  } else {
-    console.log(
-      "CONDIÇÃO FALSA: O usuário NÃO é 'dono' ou o 'role' não foi encontrado."
-    );
   }
 
   return (
     <AppShell
       padding="md"
       header={{ height: 60 }}
-      navbar={{
-        width: 300,
-        breakpoint: "sm",
-        collapsed: { mobile: !opened },
-      }}
+      navbar={{ width: 300, breakpoint: "sm", collapsed: { mobile: !opened } }}
     >
       <AppShell.Header>
         <Group h="100%" px="md">
@@ -88,7 +78,6 @@ const AppLayout = () => {
           <Title order={3}>Painel do Profissional</Title>
         </Group>
       </AppShell.Header>
-
       <AppShell.Navbar p="md">
         <AppShell.Section grow>
           {navLinks.map((link) => (
@@ -111,7 +100,6 @@ const AppLayout = () => {
           />
         </AppShell.Section>
       </AppShell.Navbar>
-
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>

@@ -1,25 +1,24 @@
-// frontend/src/hooks/useAuth.js
+import { useMemo } from "react";
 import { jwtDecode } from "jwt-decode";
 
 const useAuth = () => {
   const token = localStorage.getItem("token");
-  let user = null;
 
-  if (token) {
+  // useMemo "memoriza" o resultado. O código aqui dentro só será
+  // executado novamente se o 'token' mudar.
+  const user = useMemo(() => {
+    if (!token) {
+      return null;
+    }
     try {
-      const decodedToken = jwtDecode(token);
-
-      // --- NOSSO ESPIÃO ---
-      // Esta linha vai nos mostrar o conteúdo do token no console do navegador.
-      console.log("TOKEN DECODIFICADO DENTRO DO useAuth:", decodedToken);
-      // --------------------
-
-      user = decodedToken;
+      // Decodifica o token para ler os dados do payload
+      return jwtDecode(token);
     } catch (error) {
       console.error("Token inválido:", error);
-      localStorage.removeItem("token");
+      localStorage.removeItem("token"); // Limpa o token inválido
+      return null;
     }
-  }
+  }, [token]);
 
   return { user };
 };
