@@ -46,7 +46,6 @@ function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Estados para os filtros
   const [selectedMonth, setSelectedMonth] = useState(
     (new Date().getMonth() + 1).toString()
   );
@@ -67,11 +66,10 @@ function AnalyticsPage() {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-        const equipeCompleta = [
-          { id: user.id, nome: user.nome },
-          ...response.data,
-        ];
-        const formattedProfissionais = equipeCompleta.map((p) => ({
+        // --- CORREÇÃO APLICADA AQUI ---
+        // A API já retorna todos os profissionais, incluindo o dono.
+        // Nós apenas formatamos a lista e adicionamos a opção "Todos".
+        const formattedProfissionais = response.data.map((p) => ({
           value: p.id,
           label: p.nome,
         }));
@@ -86,7 +84,7 @@ function AnalyticsPage() {
     if (user?.role === "dono") fetchEquipe();
   }, [user]);
 
-  // useEffect que busca os dados do gráfico, agora depende de todos os filtros
+  // useEffect que busca os dados do gráfico
   useEffect(() => {
     if (!selectedMonth || !selectedYear) return;
 
@@ -141,7 +139,8 @@ function AnalyticsPage() {
   const monthLabel =
     monthOptions.find((m) => m.value === selectedMonth)?.label || "";
   const profissionalLabel =
-    profissionais.find((p) => p.value === selectedProfissionalId)?.label || "";
+    profissionais.find((p) => p.value === selectedProfissionalId)?.label ||
+    "Todos";
 
   return (
     <div>
