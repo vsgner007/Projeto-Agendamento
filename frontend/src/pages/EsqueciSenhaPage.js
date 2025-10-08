@@ -78,8 +78,7 @@ function EsqueciSenhaPage() {
             title="Verifique seu Email!"
             color="green"
           >
-            {success} No nosso ambiente de teste, verifique o terminal do
-            backend para encontrar o link do Ethereal e visualizar o email.
+            {success} Visualizar o email.
           </Alert>
         )}
         <Text ta="center" mt="md" size="sm">

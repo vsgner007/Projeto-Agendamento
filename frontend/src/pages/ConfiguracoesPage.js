@@ -1,4 +1,3 @@
-// frontend/src/pages/ConfiguracoesPage.js
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -10,6 +9,8 @@ import {
   Text,
   Switch,
   Button,
+  NumberInput,
+  Stack,
 } from "@mantine/core";
 import { TimeInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
@@ -27,6 +28,7 @@ const diasDaSemana = [
 
 function ConfiguracoesPage() {
   const [horarios, setHorarios] = useState(null);
+  const [comissao, setComissao] = useState(0); // Novo estado para a comissão
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -41,7 +43,8 @@ function ConfiguracoesPage() {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-        setHorarios(response.data);
+        setHorarios(response.data.horarios);
+        setComissao(response.data.comissao); // Salva a comissão no estado
       } catch (err) {
         setError("Não foi possível carregar as configurações.");
       } finally {
@@ -52,16 +55,13 @@ function ConfiguracoesPage() {
   }, []);
 
   const handleTimeChange = (dia, tipo, valor) => {
-    const [hora, minuto] = valor.split(":").map(Number);
     const horarioDia = horarios[dia] || "00:00-00:00";
     let [inicio, fim] = horarioDia.split("-");
-
     if (tipo === "inicio") {
       inicio = valor;
     } else {
       fim = valor;
     }
-
     setHorarios((prev) => ({ ...prev, [dia]: `${inicio}-${fim}` }));
   };
 
@@ -69,7 +69,6 @@ function ConfiguracoesPage() {
     if (isFolga) {
       setHorarios((prev) => ({ ...prev, [dia]: null }));
     } else {
-      // Retorna a um horário padrão ao desmarcar folga
       setHorarios((prev) => ({ ...prev, [dia]: "09:00-18:00" }));
     }
   };
@@ -78,12 +77,16 @@ function ConfiguracoesPage() {
     setSaving(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.put("http://localhost:3001/configuracoes", horarios, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Agora envia ambos, horários e comissão
+      await axios.put(
+        "http://localhost:3001/configuracoes",
+        { horarios, comissao: parseInt(comissao) },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
       notifications.show({
         title: "Sucesso!",
-        message: "Seus horários de trabalho foram salvos.",
+        message: "Suas configurações foram salvas.",
         color: "green",
         icon: <IconCheck />,
       });
@@ -105,12 +108,30 @@ function ConfiguracoesPage() {
   return (
     <div>
       <Title order={2} mb="lg">
-        Configurações de Horário
+        Configurações Gerais
       </Title>
-      <Paper withBorder shadow="sm" p="lg" radius="md">
-        <Text mb="md">
-          Defina seus horários de trabalho para cada dia da semana. Isso afetará
-          os horários disponíveis para agendamento.
+
+      <Paper withBorder shadow="sm" p="lg" radius="md" mt="xl">
+        <Title order={4}>Comissão da Filial</Title>
+        <Text size="sm" c="dimmed" mb="md">
+          Defina a porcentagem que o salão retém dos serviços realizados por
+          funcionários.
+        </Text>
+        <NumberInput
+          label="Comissão do Salão (%)"
+          value={comissao}
+          onChange={setComissao}
+          min={0}
+          max={100}
+          step={5}
+        />
+      </Paper>
+
+      <Paper withBorder shadow="sm" p="lg" radius="md" mt="xl">
+        <Title order={4}>Horários de Trabalho</Title>
+        <Text size="sm" c="dimmed" mb="md">
+          Defina os horários de funcionamento. Isso afetará os horários
+          disponíveis para agendamento para todos os profissionais.
         </Text>
         {horarios &&
           diasDaSemana.map(({ key, label }) => {
@@ -119,7 +140,6 @@ function ConfiguracoesPage() {
             const [inicio, fim] = isFolga
               ? ["09:00", "18:00"]
               : horarioDoDia.split("-");
-
             return (
               <Group
                 key={key}
@@ -157,12 +177,13 @@ function ConfiguracoesPage() {
               </Group>
             );
           })}
-        <Group justify="flex-end" mt="xl">
-          <Button onClick={handleSaveChanges} loading={saving}>
-            Salvar Alterações
-          </Button>
-        </Group>
       </Paper>
+
+      <Group justify="flex-end" mt="xl">
+        <Button onClick={handleSaveChanges} loading={saving} size="md">
+          Salvar Todas as Alterações
+        </Button>
+      </Group>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   IconSettings,
   IconUsers,
   IconAddressBook,
+  IconReportMoney,
 } from "@tabler/icons-react";
 import useAuth from "../hooks/useAuth";
 
@@ -37,6 +38,16 @@ const AppLayout = () => {
     { icon: <IconCalendar size="1rem" />, label: "Agenda", path: "/agenda" },
   ];
 
+  // Adiciona link de financeiro apenas para o funcionário
+  if (user?.role === "funcionario") {
+    navLinks.push({
+      icon: <IconReportMoney size="1rem" />,
+      label: "Meu Financeiro",
+      path: "/meu-faturamento",
+    });
+  }
+
+  // Adiciona links de admin para dono e recepcionista
   if (user?.role === "dono" || user?.role === "recepcionista") {
     navLinks.push({
       icon: <IconAddressBook size="1rem" />,
@@ -45,6 +56,7 @@ const AppLayout = () => {
     });
   }
 
+  // Adiciona links apenas para o dono
   if (user?.role === "dono") {
     navLinks.push(
       {

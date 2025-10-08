@@ -6,6 +6,7 @@ const cors = require("cors");
 const authMiddleware = require("./middleware/auth");
 const checkRole = require("./middleware/checkRole");
 const authClienteMiddleware = require("./middleware/authCliente");
+const authFuncionarioMiddleware = require("./middleware/authFuncionario"); // Novo
 
 const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
@@ -402,6 +403,50 @@ app.delete(
   }
 );
 
+app.get(
+  "/profissionais/meu-relatorio-financeiro",
+  authFuncionarioMiddleware,
+  async (req, res) => {
+    try {
+      const { id: profissional_id } = req.profissional;
+      const { mes, ano } = req.query;
+      if (!mes || !ano)
+        return res.status(400).json({ message: "Mês e ano são obrigatórios." });
+
+      // Busca a comissão da filial
+      const comissaoQuery = `SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1`;
+      const comissaoResult = await db.query(comissaoQuery, [profissional_id]);
+      const comissao = comissaoResult.rows[0]?.comissao_percentual || 50;
+
+      // Busca os agendamentos concluídos do funcionário no período
+      const queryText = `
+            SELECT ca.data_hora_inicio, c.nome_cliente, ca.preco_total,
+                   (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
+            FROM carrinho_agendamento ca
+            JOIN cliente c ON ca.cliente_id = c.id
+            WHERE ca.profissional_id = $1 AND ca.status = 'concluido'
+            AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2 
+            AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3
+            ORDER BY ca.data_hora_inicio DESC;
+        `;
+      const result = await db.query(queryText, [profissional_id, mes, ano]);
+
+      // Calcula o valor líquido para cada serviço
+      const relatorio = result.rows.map((item) => {
+        const precoBruto = parseFloat(item.preco_total);
+        const valorAReceber = precoBruto * (1 - comissao / 100);
+        return {
+          ...item,
+          valor_a_receber: valorAReceber.toFixed(2),
+        };
+      });
+
+      res.status(200).json({ relatorio, comissao });
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
 // =================================================================
 // --- ROTAS PROTEGIDAS DO PAINEL ---
 // =================================================================
@@ -409,15 +454,15 @@ app.delete(
 // --- Serviços ---
 app.get("/servicos", authMiddleware, async (req, res) => {
   try {
-    const { id: profissional_id, role } = req.profissional;
-    let queryText;
-    let values = [profissional_id];
-    if (role === "dono" || role === "recepcionista") {
-      queryText = `SELECT s.* FROM servico s JOIN profissional p ON s.profissional_id = p.id WHERE p.filial_id = (SELECT filial_id FROM profissional WHERE id = $1) ORDER BY s.nome_servico;`;
-    } else {
-      queryText = `SELECT s.* FROM servico s JOIN profissional_servico ps ON s.id = ps.servico_id WHERE ps.profissional_id = $1 ORDER BY s.nome_servico;`;
-    }
-    const result = await db.query(queryText, values);
+    const { id: profissional_id } = req.profissional;
+    // Lógica unificada: qualquer profissional logado vê todos os serviços da sua filial
+    const queryText = `
+        SELECT s.* FROM servico s
+        JOIN profissional p_dono ON s.profissional_id = p_dono.id
+        WHERE p_dono.filial_id = (SELECT filial_id FROM profissional WHERE id = $1)
+        ORDER BY s.nome_servico;
+    `;
+    const result = await db.query(queryText, [profissional_id]);
     res.status(200).json(result.rows);
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -712,15 +757,28 @@ app.get(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-      const result = await db.query(
+
+      // Busca tanto os horários do profissional (dono) quanto a comissão da filial
+      const horariosResult = await db.query(
         "SELECT config_horarios FROM profissional WHERE id = $1",
         [profissional_id]
       );
-      if (result.rows.length === 0)
+      const filialResult = await db.query(
+        "SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1",
+        [profissional_id]
+      );
+
+      if (horariosResult.rows.length === 0 || filialResult.rows.length === 0) {
         return res
           .status(404)
-          .json({ message: "Profissional não encontrado." });
-      res.status(200).json(result.rows[0].config_horarios);
+          .json({ message: "Configurações não encontradas." });
+      }
+
+      // Retorna um objeto com ambas as configurações
+      res.status(200).json({
+        horarios: horariosResult.rows[0].config_horarios,
+        comissao: filialResult.rows[0].comissao_percentual,
+      });
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });
     }
@@ -734,16 +792,34 @@ app.put(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-      const novosHorarios = req.body;
-      if (typeof novosHorarios !== "object" || novosHorarios === null)
-        return res.status(400).json({ message: "Formato de dados inválido." });
-      const queryText = `UPDATE profissional SET config_horarios = $1 WHERE id = $2 RETURNING config_horarios;`;
-      const result = await db.query(queryText, [
-        novosHorarios,
-        profissional_id,
-      ]);
-      res.status(200).json(result.rows[0].config_horarios);
+      const { horarios, comissao } = req.body; // Agora recebe horários e comissão
+
+      // 1. Atualiza os horários na tabela do profissional (dono)
+      if (horarios) {
+        await db.query(
+          `UPDATE profissional SET config_horarios = $1 WHERE id = $2`,
+          [horarios, profissional_id]
+        );
+      }
+
+      // 2. Atualiza a comissão na tabela da filial
+      if (comissao !== undefined) {
+        const filialResult = await db.query(
+          "SELECT filial_id FROM profissional WHERE id = $1",
+          [profissional_id]
+        );
+        const filial_id = filialResult.rows[0]?.filial_id;
+        if (filial_id) {
+          await db.query(
+            `UPDATE filial SET comissao_percentual = $1 WHERE id = $2`,
+            [comissao, filial_id]
+          );
+        }
+      }
+
+      res.status(200).json({ message: "Configurações salvas com sucesso." });
     } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   }
@@ -957,12 +1033,10 @@ app.post("/esqueci-senha", async (req, res) => {
       console.log(
         `[LOG] Usuário com email ${email} não encontrado na tabela ${tabela}. Respondendo com sucesso genérico.`
       );
-      return res
-        .status(200)
-        .json({
-          message:
-            "Se um usuário com este email existir, um link de recuperação será enviado.",
-        });
+      return res.status(200).json({
+        message:
+          "Se um usuário com este email existir, um link de recuperação será enviado.",
+      });
     }
     console.log(`[LOG] Usuário ${email} encontrado. Gerando token de reset...`);
 
@@ -989,12 +1063,10 @@ app.post("/esqueci-senha", async (req, res) => {
     console.log(
       `[LOG] Processo de /esqueci-senha concluído com sucesso para ${email}.`
     );
-    res
-      .status(200)
-      .json({
-        message:
-          "Se um usuário com este email existir, um link de recuperação será enviado.",
-      });
+    res.status(200).json({
+      message:
+        "Se um usuário com este email existir, um link de recuperação será enviado.",
+    });
   } catch (error) {
     console.error("ERRO CRÍTICO NA ROTA /esqueci-senha:", error);
     res.status(500).json({ message: "Erro interno do servidor." });

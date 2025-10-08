@@ -1,25 +1,55 @@
 const sgMail = require("@sendgrid/mail");
 
 const apiKey = process.env.SENDGRID_API_KEY;
+const fromEmail = process.env.SENDGRID_FROM_EMAIL;
 
-if (apiKey) {
-  console.log("Chave de API do SendGrid encontrada e configurada!");
+// Verificação de inicialização
+if (apiKey && fromEmail) {
   sgMail.setApiKey(apiKey);
+  console.log("SendGrid configurado com sucesso. Remetente:", fromEmail);
 } else {
   console.error(
-    "ERRO CRÍTICO: A variável SENDGRID_API_KEY não foi encontrada no arquivo .env!"
+    "ERRO CRÍTICO: As variáveis SENDGRID_API_KEY e SENDGRID_FROM_EMAIL devem ser definidas no arquivo .env!"
   );
 }
 
-async function enviarEmailReset(destinatario, link) {
-  // Use diretamente o seu email verificado.
-  const remetenteVerificado = "vsgner032@gmail.com";
+/**
+ * Função genérica para enviar qualquer email.
+ * @param {string} to - O email do destinatário.
+ * @param {string} subject - O assunto do email.
+ * @param {string} html - O conteúdo HTML do email.
+ */
+async function sendEmail(to, subject, html) {
+  if (!apiKey || !fromEmail) {
+    console.error(
+      "O envio de email está desativado por falta de configuração."
+    );
+    throw new Error("O serviço de email não está configurado.");
+  }
 
   const msg = {
-    to: destinatario,
-    from: remetenteVerificado,
-    subject: "Recuperação de Senha - Seu App de Agendamento",
-    html: `
+    to,
+    from: fromEmail,
+    subject,
+    html,
+  };
+
+  try {
+    await sgMail.send(msg);
+    console.log(`Email enviado com sucesso para: ${to}`);
+  } catch (error) {
+    console.error(`ERRO DETALHADO DO SENDGRID ao enviar para ${to}:`, error);
+    if (error.response) {
+      console.error(error.response.body);
+    }
+    throw new Error("Falha ao se comunicar com a API do SendGrid.");
+  }
+}
+
+// Função específica que USA a função genérica
+async function enviarEmailReset(destinatario, link) {
+  const subject = "Recuperação de Senha - Seu App de Agendamento";
+  const html = `
         <div style="font-family: Arial, sans-serif; line-height: 1.6;">
             <h2>Recuperação de Senha</h2>
             <p>Olá,</p>
@@ -32,22 +62,10 @@ async function enviarEmailReset(destinatario, link) {
             </p>
             <p>Este link é válido por 1 hora.</p>
         </div>
-    `,
-  };
+    `;
 
-  try {
-    await sgMail.send(msg);
-    console.log(
-      "SUCESSO: Email de recuperação enviado via SendGrid para:",
-      destinatario
-    );
-  } catch (error) {
-    console.error("ERRO DETALHADO DO SENDGRID:", error);
-    if (error.response) {
-      console.error("Detalhes do corpo do erro:", error.response.body);
-    }
-    throw new Error("Falha ao se comunicar com a API do SendGrid.");
-  }
+  // Chama a função genérica com os dados específicos
+  await sendEmail(destinatario, subject, html);
 }
 
-module.exports = { enviarEmailReset };
+module.exports = { enviarEmailReset, sendEmail }; // Exportamos ambas
