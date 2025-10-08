@@ -7,6 +7,9 @@ const authMiddleware = require("./middleware/auth");
 const checkRole = require("./middleware/checkRole");
 const authClienteMiddleware = require("./middleware/authCliente");
 
+const crypto = require("crypto");
+const { enviarEmailReset } = require("./email");
+
 const app = express();
 const port = 3001;
 
@@ -649,12 +652,10 @@ app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
 
     const result = await db.query(queryText, values);
     if (result.rowCount === 0)
-      return res
-        .status(404)
-        .json({
-          message:
-            "Agendamento não encontrado ou você não tem permissão para atualizá-lo.",
-        });
+      return res.status(404).json({
+        message:
+          "Agendamento não encontrado ou você não tem permissão para atualizá-lo.",
+      });
 
     res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -936,6 +937,125 @@ app.get(
     }
   }
 );
+
+app.post("/esqueci-senha", async (req, res) => {
+  try {
+    const { email, tipo } = req.body;
+    console.log(
+      `[LOG] Solicitação de reset para email: ${email}, tipo: ${tipo}`
+    );
+
+    const tabela = tipo === "profissional" ? "profissional" : "cliente";
+    const colunaEmail = tipo === "profissional" ? "email" : "email_contato";
+
+    const userResult = await db.query(
+      `SELECT * FROM ${tabela} WHERE ${colunaEmail} = $1`,
+      [email]
+    );
+
+    if (userResult.rows.length === 0) {
+      console.log(
+        `[LOG] Usuário com email ${email} não encontrado na tabela ${tabela}. Respondendo com sucesso genérico.`
+      );
+      return res
+        .status(200)
+        .json({
+          message:
+            "Se um usuário com este email existir, um link de recuperação será enviado.",
+        });
+    }
+    console.log(`[LOG] Usuário ${email} encontrado. Gerando token de reset...`);
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    const tokenExpires = new Date(Date.now() + 3600000);
+
+    await db.query(
+      `UPDATE ${tabela} SET reset_token = $1, reset_token_expires = $2 WHERE ${colunaEmail} = $3`,
+      [hashedToken, tokenExpires, email]
+    );
+    console.log(`[LOG] Token de reset salvo no banco de dados para ${email}.`);
+
+    const resetUrl = `http://localhost:3000/resetar-senha/${resetToken}?tipo=${tipo}`;
+    console.log(
+      `[LOG] Preparando para enviar email para ${email} com o link: ${resetUrl}`
+    );
+
+    await enviarEmailReset(email, resetUrl); // A chamada para o nosso email.js
+
+    console.log(
+      `[LOG] Processo de /esqueci-senha concluído com sucesso para ${email}.`
+    );
+    res
+      .status(200)
+      .json({
+        message:
+          "Se um usuário com este email existir, um link de recuperação será enviado.",
+      });
+  } catch (error) {
+    console.error("ERRO CRÍTICO NA ROTA /esqueci-senha:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
+
+// ROTA PARA EFETIVAMENTE RESETAR A SENHA
+app.post("/resetar-senha", async (req, res) => {
+  try {
+    const { token, tipo, senha } = req.body;
+    if (!token || !tipo || !senha) {
+      return res
+        .status(400)
+        .json({ message: "Token, tipo e nova senha são obrigatórios." });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    let userResult;
+
+    if (tipo === "profissional") {
+      userResult = await db.query(
+        `SELECT * FROM profissional WHERE reset_token = $1 AND reset_token_expires > NOW()`,
+        [hashedToken]
+      );
+    } else if (tipo === "cliente") {
+      userResult = await db.query(
+        `SELECT * FROM cliente WHERE reset_token = $1 AND reset_token_expires > NOW()`,
+        [hashedToken]
+      );
+    } else {
+      return res.status(400).json({ message: "Tipo de usuário inválido." });
+    }
+
+    if (userResult.rows.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Token de recuperação inválido ou expirado." });
+    }
+    const user = userResult.rows[0];
+
+    const salt = await bcrypt.genSalt(10);
+    const senhaHash = await bcrypt.hash(senha, salt);
+
+    if (tipo === "profissional") {
+      await db.query(
+        `UPDATE profissional SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+        [senhaHash, user.id]
+      );
+    } else {
+      await db.query(
+        `UPDATE cliente SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+        [senhaHash, user.id]
+      );
+    }
+
+    res.status(200).json({ message: "Senha atualizada com sucesso." });
+  } catch (error) {
+    console.error("ERRO DETALHADO EM /resetar-senha:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
 
 // =================================================================
 // --- INICIALIZAÇÃO DO SERVIDOR ---

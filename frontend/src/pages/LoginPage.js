@@ -1,9 +1,6 @@
-// frontend/src/pages/LoginPage.js
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-
-// Importando componentes do Mantine, incluindo o Alert e os ícones
 import {
   TextInput,
   PasswordInput,
@@ -12,6 +9,7 @@ import {
   Title,
   Container,
   Alert,
+  Text,
 } from "@mantine/core";
 import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
 
@@ -23,7 +21,6 @@ function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Pega a mensagem de sucesso que pode ter vindo da página de cadastro
   const successMessage = location.state?.successMessage;
 
   const handleSubmit = async (event) => {
@@ -49,9 +46,8 @@ function LoginPage() {
 
   return (
     <Container size={420} my={40}>
-      <Title ta="center">Bem-vindo!</Title>
+      <Title ta="center">Painel do Profissional</Title>
 
-      {/* Exibe a mensagem de sucesso do cadastro, se houver */}
       {successMessage && (
         <Alert
           icon={<IconCheck size={16} />}
@@ -84,7 +80,6 @@ function LoginPage() {
             mt="md"
           />
 
-          {/* Exibe a mensagem de erro de login, se houver */}
           {error && (
             <Alert
               icon={<IconAlertCircle size={16} />}
@@ -100,11 +95,16 @@ function LoginPage() {
             Entrar
           </Button>
 
-          <div style={{ textAlign: "center", marginTop: "20px" }}>
-            <p>
-              Não tem uma conta? <Link to="/cadastro">Cadastre-se</Link>
-            </p>
-          </div>
+          {/* A linha de "Cadastre-se" foi removida daqui */}
+
+          <Text ta="center" mt="md" c="dimmed" size="xs">
+            <Link to="/cliente/login">
+              É um cliente? Acesse a Área do Cliente
+            </Link>
+          </Text>
+          <Text ta="center" size="sm" mt="md">
+            <Link to="/esqueci-senha">Esqueci minha senha</Link>
+          </Text>
         </form>
       </Paper>
     </Container>

@@ -77,6 +77,9 @@ function ClienteLoginPage() {
           <Text ta="center" mt="md">
             <Link to="/login">Acesso Profissional</Link>
           </Text>
+          <Text ta="center" size="sm" mt="md">
+            <Link to="/esqueci-senha">Esqueci minha senha</Link>
+          </Text>
         </form>
       </Paper>
     </Container>
