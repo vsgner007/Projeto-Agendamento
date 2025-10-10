@@ -38,7 +38,6 @@ const AppLayout = () => {
     { icon: <IconCalendar size="1rem" />, label: "Agenda", path: "/agenda" },
   ];
 
-  // Adiciona link de financeiro apenas para o funcionário
   if (user?.role === "funcionario") {
     navLinks.push({
       icon: <IconReportMoney size="1rem" />,
@@ -47,7 +46,6 @@ const AppLayout = () => {
     });
   }
 
-  // Adiciona links de admin para dono e recepcionista
   if (user?.role === "dono" || user?.role === "recepcionista") {
     navLinks.push({
       icon: <IconAddressBook size="1rem" />,
@@ -56,7 +54,6 @@ const AppLayout = () => {
     });
   }
 
-  // Adiciona links apenas para o dono
   if (user?.role === "dono") {
     navLinks.push(
       {
@@ -70,6 +67,7 @@ const AppLayout = () => {
         path: "/analytics",
       },
       { icon: <IconUsers size="1rem" />, label: "Equipe", path: "/equipe" },
+
       {
         icon: <IconSettings size="1rem" />,
         label: "Configurações",
@@ -82,7 +80,11 @@ const AppLayout = () => {
     <AppShell
       padding="md"
       header={{ height: 60 }}
-      navbar={{ width: 300, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      navbar={{
+        width: 300,
+        breakpoint: "sm",
+        collapsed: { mobile: !opened },
+      }}
     >
       <AppShell.Header>
         <Group h="100%" px="md">
@@ -92,22 +94,27 @@ const AppLayout = () => {
       </AppShell.Header>
       <AppShell.Navbar p="md">
         <AppShell.Section grow>
-          {navLinks.map((link) => (
-            <NavLink
-              key={link.label}
-              label={link.label}
-              icon={link.icon}
-              component={RouterNavLink}
-              to={link.path}
-              active={window.location.pathname === link.path}
-              onClick={toggle}
-            />
-          ))}
+          {navLinks
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map(
+              (
+                link // Organiza os links em ordem alfabética
+              ) => (
+                <NavLink
+                  key={link.label}
+                  label={link.label}
+                  leftSection={link.icon}
+                  component={RouterNavLink}
+                  to={link.path}
+                  onClick={toggle}
+                />
+              )
+            )}
         </AppShell.Section>
         <AppShell.Section>
           <NavLink
             label="Sair"
-            icon={<IconLogout size="1rem" />}
+            leftSection={<IconLogout size="1rem" />}
             onClick={handleLogout}
           />
         </AppShell.Section>

@@ -7,15 +7,51 @@ const authMiddleware = require("./middleware/auth");
 const checkRole = require("./middleware/checkRole");
 const authClienteMiddleware = require("./middleware/authCliente");
 const authFuncionarioMiddleware = require("./middleware/authFuncionario"); // Novo
-
+const cron = require("node-cron"); // Importa o agendador
+const { enviarLembreteWhatsApp } = require("./whatsapp"); // Importa nosso módulo de WhatsApp
 const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
-
+//const checkPlan = require("./middleware/checkPlan");
 const app = express();
 const port = 3001;
-
+const { MercadoPagoConfig, PreApproval } = require("mercadopago");
 app.use(cors());
 app.use(express.json());
+
+// const mpClient = new MercadoPagoConfig({
+//   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
+// });
+
+const planos = {
+  individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
+  equipe: "7bd36f48c3c54a2ca25d46b6e635f551",
+  premium: "75d0d3c4fec54bc8a48b91311c4def1b",
+};
+
+// =================================================================
+// --- Middleware "Espião" de Planos (para depuração) ---
+// =================================================================
+const checkPlan = (planosPermitidos) => {
+  return (req, res, next) => {
+    const userPlan = req.profissional?.plano;
+
+    // Logs de depuração
+    console.log("\n--- VERIFICANDO PLANO DE ASSINATURA ---");
+    console.log("Plano do usuário (do token):", userPlan);
+    console.log("Planos permitidos para esta rota:", planosPermitidos);
+
+    if (userPlan && planosPermitidos.includes(userPlan)) {
+      console.log("Resultado da verificação: ACESSO PERMITIDO");
+      next(); // Permite o acesso
+    } else {
+      console.log("Resultado da verificação: ACESSO BLOQUEADO");
+      res.status(403).json({
+        message:
+          "Funcionalidade não disponível no seu plano. Considere fazer um upgrade.",
+      });
+    }
+  };
+};
 
 app.use((req, res, next) => {
   console.log(
@@ -202,21 +238,26 @@ app.post("/login", async (req, res) => {
       return res
         .status(400)
         .json({ message: "Email e senha são obrigatórios." });
-    const result = await db.query(
-      "SELECT * FROM profissional WHERE email = $1",
-      [email]
-    );
+
+    const queryText = `SELECT p.*, f.plano FROM profissional p LEFT JOIN filial f ON p.filial_id = f.id WHERE p.email = $1`;
+    const result = await db.query(queryText, [email]);
     if (result.rows.length === 0)
       return res.status(401).json({ message: "Credenciais inválidas." });
+
     const profissional = result.rows[0];
     const senhaCorreta = await bcrypt.compare(senha, profissional.senha_hash);
     if (!senhaCorreta)
       return res.status(401).json({ message: "Credenciais inválidas." });
+
+    // --- CORREÇÃO APLICADA AQUI ---
     const payload = {
       id: profissional.id,
       nome: profissional.nome,
       role: profissional.role,
+      plano: profissional.plano,
+      email: profissional.email, // Adiciona o email ao token
     };
+
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
@@ -230,14 +271,11 @@ app.post(
   "/profissionais",
   authMiddleware,
   checkRole(["dono"]),
+  checkPlan(["equipe", "premium"]),
   async (req, res) => {
     try {
       const donoId = req.profissional.id;
       const { nome, email, senha, role } = req.body;
-      if (!nome || !email || !senha || !role)
-        return res.status(400).json({
-          message: "Nome, email, senha e papel (role) são obrigatórios.",
-        });
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [donoId]
@@ -365,23 +403,43 @@ app.get(
 );
 
 app.post(
-  "/profissionais/:id/servicos",
+  "/profissionais",
   authMiddleware,
   checkRole(["dono"]),
+  checkPlan(["equipe", "premium"]),
   async (req, res) => {
     try {
-      const { id: profissional_id } = req.params;
-      const { servico_id } = req.body;
-      if (!servico_id)
-        return res
-          .status(400)
-          .json({ message: "O ID do serviço é obrigatório." });
-      const queryText = `INSERT INTO profissional_servico (profissional_id, servico_id) VALUES ($1, $2)`;
-      await db.query(queryText, [profissional_id, servico_id]);
-      res.status(201).json({ message: "Serviço associado com sucesso." });
+      const donoId = req.profissional.id;
+      const { nome, email, senha, role } = req.body;
+      if (!nome || !email || !senha || !role)
+        return res.status(400).json({
+          message: "Nome, email, senha e papel (role) são obrigatórios.",
+        });
+      const filialResult = await db.query(
+        "SELECT filial_id FROM profissional WHERE id = $1",
+        [donoId]
+      );
+      if (!filialResult.rows[0]?.filial_id)
+        return res.status(400).json({
+          message: "Administrador não está associado a uma filial válida.",
+        });
+      const filial_id = filialResult.rows[0].filial_id;
+      const salt = await bcrypt.genSalt(10);
+      const senhaHash = await bcrypt.hash(senha, salt);
+      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role;`;
+      const result = await db.query(queryText, [
+        nome,
+        email,
+        senhaHash,
+        role,
+        filial_id,
+      ]);
+      res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")
-        return res.status(200).json({ message: "Associação já existe." });
+        return res
+          .status(409)
+          .json({ message: "Este email já está cadastrado." });
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   }
@@ -757,8 +815,6 @@ app.get(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-
-      // Busca tanto os horários do profissional (dono) quanto a comissão da filial
       const horariosResult = await db.query(
         "SELECT config_horarios FROM profissional WHERE id = $1",
         [profissional_id]
@@ -767,14 +823,11 @@ app.get(
         "SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1",
         [profissional_id]
       );
-
       if (horariosResult.rows.length === 0 || filialResult.rows.length === 0) {
         return res
           .status(404)
           .json({ message: "Configurações não encontradas." });
       }
-
-      // Retorna um objeto com ambas as configurações
       res.status(200).json({
         horarios: horariosResult.rows[0].config_horarios,
         comissao: filialResult.rows[0].comissao_percentual,
@@ -792,9 +845,8 @@ app.put(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-      const { horarios, comissao } = req.body; // Agora recebe horários e comissão
+      const { horarios, comissao } = req.body;
 
-      // 1. Atualiza os horários na tabela do profissional (dono)
       if (horarios) {
         await db.query(
           `UPDATE profissional SET config_horarios = $1 WHERE id = $2`,
@@ -802,7 +854,6 @@ app.put(
         );
       }
 
-      // 2. Atualiza a comissão na tabela da filial
       if (comissao !== undefined) {
         const filialResult = await db.query(
           "SELECT filial_id FROM profissional WHERE id = $1",
@@ -814,6 +865,10 @@ app.put(
             `UPDATE filial SET comissao_percentual = $1 WHERE id = $2`,
             [comissao, filial_id]
           );
+        } else {
+          return res
+            .status(400)
+            .json({ message: "Usuário dono não está ligado a uma filial." });
         }
       }
 
@@ -1128,6 +1183,209 @@ app.post("/resetar-senha", async (req, res) => {
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
+
+// =================================================================
+// --- ROBÔ DE LEMBRETES AUTOMÁTICOS (CRON JOB) ---
+// =================================================================
+console.log("Agendando robô de lembretes...");
+// Agenda a tarefa para rodar a cada 30 minutos
+cron.schedule("*/30 * * * *", async () => {
+  console.log(
+    `[${new Date().toLocaleString(
+      "pt-BR"
+    )}] 🤖 Robô de lembretes verificando agendamentos...`
+  );
+
+  try {
+    // Procura agendamentos que estão 'agendado', ainda não tiveram lembrete enviado,
+    // e que acontecerão entre 23 e 24 horas a partir de agora.
+    const queryText = `
+        SELECT ca.id, ca.data_hora_inicio, c.nome_cliente, c.telefone_contato,
+               (SELECT STRING_AGG(s.nome_servico, ', ') 
+                FROM servico s 
+                JOIN carrinho_servico cs ON s.id = cs.servico_id 
+                WHERE cs.carrinho_id = ca.id) as nome_servico
+        FROM carrinho_agendamento ca
+        JOIN cliente c ON ca.cliente_id = c.id
+        WHERE 
+            ca.status = 'agendado' 
+            AND ca.lembrete_enviado = FALSE
+            AND ca.data_hora_inicio BETWEEN NOW() + interval '23 hours' AND NOW() + interval '24 hours';
+    `;
+    const result = await db.query(queryText);
+    const agendamentosParaLembrar = result.rows;
+
+    if (agendamentosParaLembrar.length > 0) {
+      console.log(
+        `🤖 Encontrados ${agendamentosParaLembrar.length} agendamentos para enviar lembrete.`
+      );
+
+      for (const ag of agendamentosParaLembrar) {
+        const dataFormatada = new Date(ag.data_hora_inicio).toLocaleDateString(
+          "pt-BR",
+          { day: "2-digit", month: "2-digit" }
+        );
+        const horaFormatada = new Date(ag.data_hora_inicio).toLocaleTimeString(
+          "pt-BR",
+          { hour: "2-digit", minute: "2-digit" }
+        );
+
+        const mensagem = `Olá, ${ag.nome_cliente}! Passando para lembrar do seu agendamento de "${ag.nome_servico}" amanhã, dia ${dataFormatada} às ${horaFormatada}. Esperamos por você!`;
+
+        // O número precisa estar no formato 'whatsapp:+5561999998888'
+        const telefoneParaEnvio = `whatsapp:${ag.telefone_contato.replace(
+          /\D/g,
+          ""
+        )}`;
+
+        const sucesso = await enviarLembreteWhatsApp(
+          telefoneParaEnvio,
+          mensagem
+        );
+
+        if (sucesso) {
+          // Se o envio foi bem-sucedido, marca no banco para não enviar de novo
+          await db.query(
+            "UPDATE carrinho_agendamento SET lembrete_enviado = TRUE WHERE id = $1",
+            [ag.id]
+          );
+        }
+      }
+    } else {
+      console.log("🤖 Nenhum agendamento para lembrar neste ciclo.");
+    }
+  } catch (error) {
+    console.error("🤖 Erro ao executar o robô de lembretes:", error);
+  }
+});
+
+let mpClient;
+try {
+  console.log("Configurando o cliente Mercado Pago...");
+  mpClient = new MercadoPagoConfig({
+    accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
+    options: { timeout: 5000 },
+  });
+  console.log("Cliente Mercado Pago configurado com sucesso.");
+} catch (e) {
+  console.error("ERRO CRÍTICO AO CONFIGURAR O MERCADO PAGO:", e);
+}
+
+// =================================================================
+// --- ROTA DE CHECKOUT DE ASSINATURA (COM DEPURAÇÃO) ---
+// =================================================================
+app.post("/criar-preferencia-assinatura", authMiddleware, async (req, res) => {
+  try {
+    console.log("1. Rota /criar-preferencia-assinatura iniciada.");
+    const { planoId } = req.body;
+    const { email } = req.profissional;
+    console.log(`2. Plano recebido: ${planoId}, Email do pagador: ${email}`);
+
+    const planos = {
+      individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
+      equipe: "7bd36f48c3c54a2ca25d46b6e635f551",
+      premium: "75d0d3c4fec54bc8a48b91311c4def1b",
+    };
+    const preapproval_plan_id = planos[planoId];
+
+    if (!preapproval_plan_id) {
+      console.log("ERRO: ID de plano inválido.");
+      return res.status(400).json({ message: "ID de plano inválido." });
+    }
+    console.log(
+      `3. Usando o ID do plano do Mercado Pago: ${preapproval_plan_id}`
+    );
+
+    const requestBody = {
+      preapproval_plan_id: preapproval_plan_id,
+      reason: `Assinatura do plano ${planoId}`,
+      payer_email: email,
+      back_urls: {
+        success: `http://localhost:3000/assinatura/sucesso`,
+      },
+    };
+
+    console.log("4. Criando instância de PreApproval...");
+    const preapproval = new PreApproval(mpClient);
+
+    console.log("5. Enviando requisição para a API do Mercado Pago...");
+    const response = await preapproval.create({ body: requestBody });
+
+    console.log(
+      "6. Resposta recebida do Mercado Pago com sucesso. Link:",
+      response.init_point
+    );
+    res.json({ init_point: response.init_point });
+  } catch (error) {
+    console.error(
+      "ERRO DETALHADO AO CRIAR PREFERÊNCIA:",
+      error?.cause || error
+    );
+    res.status(500).json({ message: "Falha ao criar link de pagamento." });
+  }
+});
+
+// ROTA WEBHOOK para receber notificações do Mercado Pago
+app.post("/webhook/mercadopago", async (req, res) => {
+  console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---");
+  console.log("Query:", req.query);
+  console.log("Body:", req.body);
+
+  try {
+    // A notificação de uma nova assinatura bem-sucedida tem o tipo 'preapproval'
+    if (req.body.type === "preapproval") {
+      const preapprovalId = req.body.data.id;
+      console.log(
+        `[WEBHOOK] Notificação para a pré-aprovação ID: ${preapprovalId}`
+      );
+
+      // 1. Busca os detalhes da assinatura no Mercado Pago
+      const preapproval = new PreApproval(mpClient);
+      const subscriptionDetails = await preapproval.get({ id: preapprovalId });
+      console.log("[WEBHOOK] Detalhes da assinatura obtidos com sucesso.");
+
+      const payerEmail = subscriptionDetails.payer_email;
+      const planId = subscriptionDetails.preapproval_plan_id;
+      const status = subscriptionDetails.status;
+
+      if (status === "authorized") {
+        console.log(
+          `[WEBHOOK] Assinatura autorizada para o email: ${payerEmail}`
+        );
+
+        // 2. Encontra qual dos nossos planos corresponde ao ID do MP
+        const nomeDoPlano = Object.keys(planos).find(
+          (key) => planos[key] === planId
+        );
+        if (!nomeDoPlano) {
+          console.error(
+            `[WEBHOOK] ERRO: ID de plano ${planId} não encontrado em nosso mapeamento.`
+          );
+          return res.status(200).send("OK");
+        }
+        console.log(`[WEBHOOK] Plano assinado: ${nomeDoPlano}`);
+
+        // 3. Encontra o usuário 'dono' pelo email e atualiza o plano da sua filial
+        const updateUserPlanQuery = `
+                    UPDATE filial SET plano = $1
+                    WHERE id = (SELECT filial_id FROM profissional WHERE email = $2 AND role = 'dono');
+                `;
+        await db.query(updateUserPlanQuery, [nomeDoPlano, payerEmail]);
+        console.log(
+          `[WEBHOOK] SUCESSO: Plano do usuário ${payerEmail} atualizado para '${nomeDoPlano}' no banco de dados.`
+        );
+      }
+    }
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("[WEBHOOK] Erro ao processar notificação:", error);
+    res.status(500).send("Erro processando webhook");
+  }
+});
+
+// dbdd6d20e2f447c68a6a4b58c8262ce3
+// 7bd36f48c3c54a2ca25d46b6e635f551
+// 75d0d3c4fec54bc8a48b91311c4def1b
 
 // =================================================================
 // --- INICIALIZAÇÃO DO SERVIDOR ---
