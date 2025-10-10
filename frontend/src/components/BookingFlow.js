@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   Container,
@@ -15,7 +15,6 @@ import {
   Stack,
 } from "@mantine/core";
 import {
-  IconBuildingStore,
   IconUser,
   IconPlus,
   IconCalendar,
@@ -24,7 +23,7 @@ import {
 import HorarioModal from "./HorarioModal";
 import { jwtDecode } from "jwt-decode";
 
-// Componente interno reutilizável para as caixas de seleção
+// Componente interno para as caixas de seleção
 const SelectionBox = ({
   icon,
   title,
@@ -54,13 +53,12 @@ const SelectionBox = ({
 );
 
 const BookingFlow = ({ onBookingSuccess }) => {
-  // Estados para as listas de dados
-  const [filiais, setFiliais] = useState([]);
+  // Estados para os dados
+  const [filial, setFilial] = useState(null);
   const [profissionais, setProfissionais] = useState([]);
   const [servicos, setServicos] = useState([]);
 
   // Estados para as seleções do usuário
-  const [selectedFilial, setSelectedFilial] = useState(null);
   const [selectedProfissional, setSelectedProfissional] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -68,7 +66,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
   // Estados de UI e formulário final
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState({
-    filiais: true,
+    filial: true,
     profissionais: false,
     servicos: false,
     booking: false,
@@ -79,68 +77,43 @@ const BookingFlow = ({ onBookingSuccess }) => {
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
 
-  // Verifica se há um cliente logado para preencher os dados
+  // --- LÓGICA DE SUBDOMÍNIO (RESTAURADA) ---
   useEffect(() => {
-    const token = localStorage.getItem("clienteToken");
-    if (token) {
-      try {
-        const decoded = jwtDecode(token);
-        setNomeCliente(decoded.nome || "");
-        setEmailCliente(decoded.email || "");
-        setTelefoneCliente(decoded.telefone || "");
-      } catch (e) {
-        console.error("Token de cliente inválido", e);
-      }
-    }
-  }, []);
+    const hostnameParts = window.location.hostname.split(".");
+    const subdomain =
+      hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
 
-  // Funções de seleção com reset
-  const handleSelectFilial = (filial) => {
-    setSelectedFilial(filial);
-    setProfissionais([]);
-    setServicos([]);
-    setSelectedProfissional(null);
-    setSelectedServices([]);
-    setSelectedSlot(null);
-  };
-  const handleSelectProfissional = (profissional) => {
-    setSelectedProfissional(profissional);
-    setServicos([]);
-    setSelectedServices([]);
-    setSelectedSlot(null);
-  };
-  const handleServiceToggle = (servico) => {
-    setSelectedServices((currentServices) =>
-      currentServices.some((s) => s.id === servico.id)
-        ? currentServices.filter((s) => s.id !== servico.id)
-        : [...currentServices, servico]
-    );
-    setSelectedSlot(null);
-  };
-
-  // Efeitos para buscar dados em cascata
-  useEffect(() => {
-    setLoading((prev) => ({ ...prev, filiais: true }));
+    setLoading((prev) => ({ ...prev, filial: true }));
     axios
-      .get("http://localhost:3001/publico/filiais")
-      .then((response) => setFiliais(response.data))
-      .catch(() => setError("Não foi possível carregar as filiais."))
-      .finally(() => setLoading((prev) => ({ ...prev, filiais: false })));
+      .get(`http://localhost:3001/publico/filial/${subdomain}`)
+      .then((response) => {
+        setFilial(response.data);
+      })
+      .catch(() => {
+        setError(
+          `O salão "${subdomain}" não foi encontrado ou está indisponível.`
+        );
+      })
+      .finally(() => {
+        setLoading((prev) => ({ ...prev, filial: false }));
+      });
   }, []);
 
+  // Busca profissionais automaticamente quando a filial é carregada
   useEffect(() => {
-    if (selectedFilial) {
+    if (filial) {
       setLoading((prev) => ({ ...prev, profissionais: true }));
       axios
-        .get(`http://localhost:3001/publico/profissionais/${selectedFilial.id}`)
+        .get(`http://localhost:3001/publico/profissionais/${filial.id}`)
         .then((response) => setProfissionais(response.data))
         .catch(() => setError("Não foi possível carregar os profissionais."))
         .finally(() =>
           setLoading((prev) => ({ ...prev, profissionais: false }))
         );
     }
-  }, [selectedFilial]);
+  }, [filial]);
 
+  // Busca serviços quando um profissional é selecionado
   useEffect(() => {
     if (selectedProfissional) {
       setLoading((prev) => ({ ...prev, servicos: true }));
@@ -156,7 +129,37 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [selectedProfissional]);
 
-  // Submissão final do agendamento
+  // Pré-preenche dados se o cliente estiver logado
+  useEffect(() => {
+    const token = localStorage.getItem("clienteToken");
+    if (token) {
+      try {
+        const decoded = jwtDecode(token);
+        setNomeCliente(decoded.nome || "");
+        setEmailCliente(decoded.email || "");
+        setTelefoneCliente(decoded.telefone || "");
+      } catch (e) {
+        console.error("Token de cliente inválido", e);
+      }
+    }
+  }, []);
+
+  const handleSelectProfissional = (profissional) => {
+    setSelectedProfissional(profissional);
+    setServicos([]);
+    setSelectedServices([]);
+    setSelectedSlot(null);
+  };
+
+  const handleServiceToggle = (servico) => {
+    setSelectedServices((currentServices) =>
+      currentServices.some((s) => s.id === servico.id)
+        ? currentServices.filter((s) => s.id !== servico.id)
+        : [...currentServices, servico]
+    );
+    setSelectedSlot(null);
+  };
+
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
     setLoading((prev) => ({ ...prev, booking: true }));
@@ -181,10 +184,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   };
 
-  const handleSlotSelected = (slot) => {
+  // --- CORREÇÃO DO CLIQUE NO MODAL (RESTAURADA) ---
+  const handleSlotSelected = useCallback((slot) => {
     setSelectedSlot(slot);
     setIsModalOpen(false);
-  };
+  }, []);
 
   const duracaoTotal = selectedServices.reduce(
     (acc, s) => acc + s.duracao_minutos,
@@ -194,6 +198,28 @@ const BookingFlow = ({ onBookingSuccess }) => {
     (acc, s) => acc + parseFloat(s.preco),
     0
   );
+
+  // Renderização inicial enquanto a filial carrega
+  if (loading.filial) {
+    return (
+      <Center style={{ height: "100vh" }}>
+        <Loader />
+      </Center>
+    );
+  }
+
+  // Renderização de erro se a filial não for encontrada
+  if (error) {
+    return (
+      <Container my="xl">
+        <Center>
+          <Alert color="red" title="Erro">
+            {error}
+          </Alert>
+        </Center>
+      </Container>
+    );
+  }
 
   // Tela de Sucesso
   if (bookingSuccess) {
@@ -222,7 +248,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
               <strong>Profissional:</strong> {selectedProfissional.nome}
             </Text>
             <Text>
-              <strong>Unidade:</strong> {selectedFilial.nome_filial}
+              <strong>Unidade:</strong> {filial.nome_filial}
             </Text>
             <Text>
               <strong>Data:</strong>{" "}
@@ -244,11 +270,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
             fullWidth
             mt="xl"
             onClick={() => {
-              if (onBookingSuccess) {
-                onBookingSuccess();
-              } else {
-                window.location.reload();
-              }
+              onBookingSuccess ? onBookingSuccess() : window.location.reload();
             }}
           >
             {onBookingSuccess
@@ -262,43 +284,23 @@ const BookingFlow = ({ onBookingSuccess }) => {
 
   return (
     <Container size="md" my="xl">
-      <Title order={2} ta="center">
-        Selecione os detalhes do seu agendamento
+      <Title order={1} ta="center">
+        {filial ? filial.nome_filial : "Carregando..."}
       </Title>
+      <Text c="dimmed" ta="center" mt={5}>
+        Bem-vindo! Siga os passos para agendar seu horário.
+      </Text>
 
-      <SelectionBox
-        icon={<IconBuildingStore />}
-        title={
-          selectedFilial
-            ? `Filial: ${selectedFilial.nome_filial}`
-            : "Selecione a filial"
-        }
-      >
-        {loading.filiais ? (
-          <Loader />
-        ) : (
-          <Group>
-            {filiais.map((f) => (
-              <Button
-                key={f.id}
-                variant={selectedFilial?.id === f.id ? "filled" : "outline"}
-                onClick={() => handleSelectFilial(f)}
-              >
-                {f.nome_filial}
-              </Button>
-            ))}
-          </Group>
-        )}
-      </SelectionBox>
+      {/* A caixa de seleção de filial foi REMOVIDA, como esperado */}
 
       <SelectionBox
         icon={<IconUser />}
         title={
           selectedProfissional
             ? `Profissional: ${selectedProfissional.nome}`
-            : "Selecione um profissional"
+            : "1. Selecione um profissional"
         }
-        isEnabled={!!selectedFilial}
+        isEnabled={!!filial}
       >
         {loading.profissionais ? (
           <Loader />
@@ -321,7 +323,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
 
       <SelectionBox
         icon={<IconPlus />}
-        title="Selecione os serviços"
+        title="2. Selecione os serviços"
         isEnabled={!!selectedProfissional}
       >
         {loading.servicos ? (
@@ -350,26 +352,27 @@ const BookingFlow = ({ onBookingSuccess }) => {
         icon={<IconCalendar />}
         title={
           selectedSlot
-            ? `Horário: ${selectedSlot.toLocaleString("pt-BR", {
+            ? `3. Horário: ${selectedSlot.toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
               })}`
-            : "Selecione um horário"
+            : "3. Selecione um horário"
         }
         isEnabled={selectedServices.length > 0}
         onClick={() => setIsModalOpen(true)}
       >
         {selectedServices.length > 0 && (
           <Text size="sm" c="dimmed">
+            {" "}
             Duração total: {duracaoTotal} min | Preço total: R${" "}
-            {precoTotal.toFixed(2)}
+            {precoTotal.toFixed(2)}{" "}
           </Text>
         )}
       </SelectionBox>
 
       {selectedSlot && (
         <Paper withBorder p="md" mt="md" radius="md">
-          <Title order={4}>Confirme seus dados</Title>
+          <Title order={4}>4. Confirme seus dados</Title>
           <form onSubmit={handleBookingSubmit}>
             <Stack mt="md">
               <TextInput
@@ -400,12 +403,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
             </Stack>
           </form>
         </Paper>
-      )}
-
-      {error && (
-        <Alert color="red" title="Erro" mt="md">
-          {error}
-        </Alert>
       )}
 
       <HorarioModal

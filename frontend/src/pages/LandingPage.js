@@ -10,16 +10,16 @@ import {
   ThemeIcon,
   Stack,
   AppShell,
-  AppShellHeader,
 } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 const planos = [
   {
+    id: "individual", // ID interno que usaremos na URL
     nome: "Individual",
-    preco: "R$ 29,90/mês",
-    link: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=dbdd6d20e2f447c68a6a4b58c8262ce3",
+    preco: "R$ 29/mês",
+    link: "/cadastro-dono?plano=individual",
     features: [
       "1 Usuário (Dono)",
       "Agenda Online",
@@ -28,9 +28,10 @@ const planos = [
     ],
   },
   {
+    id: "equipe",
     nome: "Equipe",
-    preco: "R$ 79,90/mês",
-    link: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=7bd36f48c3c54a2ca25d46b6e635f551",
+    preco: "R$ 79/mês",
+    link: "/cadastro-dono?plano=equipe",
     features: [
       "Tudo do plano Individual",
       "Agendamentos Ilimitados",
@@ -39,9 +40,10 @@ const planos = [
     ],
   },
   {
+    id: "premium",
     nome: "Premium",
-    preco: "R$ 129,90/mês",
-    link: "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=75d0d3c4fec54bc8a48b91311c4def1b",
+    preco: "R$ 129/mês",
+    link: "/cadastro-dono?plano=premium",
     features: [
       "Tudo do plano Equipe",
       "Membros da equipe ilimitados",
@@ -57,9 +59,9 @@ function LandingPage() {
       <AppShell.Header>
         <Group
           justify="space-between"
-          style={{ height: "100%", paddingLeft: "20px", paddingRight: "20px" }}
+          style={{ height: "100%", padding: "0 20px" }}
         >
-          <Title order={3}>Agendamento SaaS</Title>
+          <Title order={3}>LookTime</Title>
           <Group>
             <Button component={Link} to="/cliente/login" variant="default">
               Login do Cliente
@@ -82,7 +84,6 @@ function LandingPage() {
               lembretes automáticos. Tudo em um só lugar.
             </Text>
           </Stack>
-
           <Container my="xl" pt="xl" id="planos">
             <Title order={2} ta="center">
               Nossos Planos
@@ -91,7 +92,6 @@ function LandingPage() {
               Escolha o plano que melhor se adapta ao crescimento do seu
               negócio.
             </Text>
-
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl">
               {planos.map((plano) => (
                 <Card
@@ -106,7 +106,6 @@ function LandingPage() {
                   <Text size="xl" fw={700} my="md">
                     {plano.preco}
                   </Text>
-
                   <Stack mt="md" gap="sm" style={{ flex: 1 }}>
                     {plano.features.map((feature) => (
                       <Group key={feature} gap="sm">
@@ -117,11 +116,9 @@ function LandingPage() {
                       </Group>
                     ))}
                   </Stack>
-
                   <Button
-                    component="a"
-                    href={plano.link}
-                    target="_blank"
+                    component={Link}
+                    to={plano.link}
                     fullWidth
                     mt="xl"
                     radius="md"

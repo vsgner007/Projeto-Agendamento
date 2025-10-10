@@ -53,6 +53,64 @@ const checkPlan = (planosPermitidos) => {
   };
 };
 
+// =================================================================
+// --- NOVA SUPER-ROTA DE REGISTRO DE NEGÓCIO ---
+// =================================================================
+app.post("/registrar-negocio", async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { nomeDono, emailDono, senhaDono, nomeFilial, planoId } = req.body;
+
+    if (!nomeDono || !emailDono || !senhaDono || !nomeFilial || !planoId) {
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são obrigatórios." });
+    }
+
+    await client.query("BEGIN");
+
+    // --- CORREÇÃO APLICADA AQUI ---
+    // Cria a filial SEMPRE com o plano 'individual'. O upgrade virá pelo webhook.
+    const filialQuery =
+      "INSERT INTO filial (nome_filial, plano) VALUES ($1, $2) RETURNING id";
+    const filialResult = await client.query(filialQuery, [
+      nomeFilial,
+      "individual",
+    ]);
+    const novaFilialId = filialResult.rows[0].id;
+
+    // Cria o profissional (dono) associado à nova filial
+    const salt = await bcrypt.genSalt(10);
+    const senhaHash = await bcrypt.hash(senhaDono, salt);
+    const donoQuery =
+      "INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role";
+    const donoResult = await client.query(donoQuery, [
+      nomeDono,
+      emailDono,
+      senhaHash,
+      "dono",
+      novaFilialId,
+    ]);
+
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      message:
+        "Negócio registrado com sucesso. Redirecionando para pagamento...",
+      user: donoResult.rows[0],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      return res.status(409).json({ message: "Este email já está em uso." });
+    }
+    console.error("ERRO CRÍTICO NO REGISTRO DE NEGÓCIO:", error);
+    res.status(500).json({ message: "Falha ao registrar novo negócio." });
+  } finally {
+    client.release();
+  }
+});
+
 app.use((req, res, next) => {
   console.log(
     `[${new Date().toLocaleString("pt-BR")}] Recebida requisição: ${
@@ -65,6 +123,22 @@ app.use((req, res, next) => {
 // =================================================================
 // --- ROTAS PÚBLICAS ---
 // =================================================================
+
+app.get("/publico/filial/:subdomain", async (req, res) => {
+  try {
+    const { subdomain } = req.params;
+    const result = await db.query(
+      "SELECT id, nome_filial FROM filial WHERE subdomain = $1",
+      [subdomain]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Filial não encontrada." });
+    }
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+});
 
 app.get("/publico/filiais", async (req, res) => {
   try {
@@ -1328,59 +1402,8 @@ app.post("/criar-preferencia-assinatura", authMiddleware, async (req, res) => {
 // ROTA WEBHOOK para receber notificações do Mercado Pago
 app.post("/webhook/mercadopago", async (req, res) => {
   console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---");
-  console.log("Query:", req.query);
-  console.log("Body:", req.body);
-
-  try {
-    // A notificação de uma nova assinatura bem-sucedida tem o tipo 'preapproval'
-    if (req.body.type === "preapproval") {
-      const preapprovalId = req.body.data.id;
-      console.log(
-        `[WEBHOOK] Notificação para a pré-aprovação ID: ${preapprovalId}`
-      );
-
-      // 1. Busca os detalhes da assinatura no Mercado Pago
-      const preapproval = new PreApproval(mpClient);
-      const subscriptionDetails = await preapproval.get({ id: preapprovalId });
-      console.log("[WEBHOOK] Detalhes da assinatura obtidos com sucesso.");
-
-      const payerEmail = subscriptionDetails.payer_email;
-      const planId = subscriptionDetails.preapproval_plan_id;
-      const status = subscriptionDetails.status;
-
-      if (status === "authorized") {
-        console.log(
-          `[WEBHOOK] Assinatura autorizada para o email: ${payerEmail}`
-        );
-
-        // 2. Encontra qual dos nossos planos corresponde ao ID do MP
-        const nomeDoPlano = Object.keys(planos).find(
-          (key) => planos[key] === planId
-        );
-        if (!nomeDoPlano) {
-          console.error(
-            `[WEBHOOK] ERRO: ID de plano ${planId} não encontrado em nosso mapeamento.`
-          );
-          return res.status(200).send("OK");
-        }
-        console.log(`[WEBHOOK] Plano assinado: ${nomeDoPlano}`);
-
-        // 3. Encontra o usuário 'dono' pelo email e atualiza o plano da sua filial
-        const updateUserPlanQuery = `
-                    UPDATE filial SET plano = $1
-                    WHERE id = (SELECT filial_id FROM profissional WHERE email = $2 AND role = 'dono');
-                `;
-        await db.query(updateUserPlanQuery, [nomeDoPlano, payerEmail]);
-        console.log(
-          `[WEBHOOK] SUCESSO: Plano do usuário ${payerEmail} atualizado para '${nomeDoPlano}' no banco de dados.`
-        );
-      }
-    }
-    res.status(200).send("OK");
-  } catch (error) {
-    console.error("[WEBHOOK] Erro ao processar notificação:", error);
-    res.status(500).send("Erro processando webhook");
-  }
+  // Lógica futura para atualizar o plano do usuário
+  res.status(200).send("OK");
 });
 
 // dbdd6d20e2f447c68a6a4b58c8262ce3

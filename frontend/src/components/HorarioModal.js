@@ -11,6 +11,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 
+// Helper para gerar os próximos dias
 const getNextDays = (numberOfDays) => {
   const days = [];
   const today = new Date();
@@ -49,7 +50,7 @@ const HorarioModal = ({
       date
     ) => {
       const slots = [];
-      if (!date || !horarioTrabalho) return slots;
+      if (!date || !horarioTrabalho || !duracaoServico) return slots;
       const dayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
       const diaDaSemana = dayNames[date.getDay()];
       const horarioDoDia = horarioTrabalho[diaDaSemana];
@@ -65,11 +66,11 @@ const HorarioModal = ({
       while (slotAtual < diaFim) {
         const slotFim = new Date(slotAtual.getTime() + duracaoServico * 60000);
         if (slotFim > diaFim) break;
-        const isOcupado = horariosOcupados.some((ocupado) => {
-          const ocupadoInicio = new Date(ocupado.data_hora_inicio);
-          const ocupadoFim = new Date(ocupado.data_hora_fim);
-          return slotAtual < ocupadoFim && slotFim > ocupadoInicio;
-        });
+        const isOcupado = horariosOcupados.some(
+          (ocupado) =>
+            new Date(ocupado.data_hora_inicio) < slotFim &&
+            new Date(ocupado.data_hora_fim) > slotAtual
+        );
         if (!isOcupado) {
           slots.push(new Date(slotAtual));
         }
@@ -78,7 +79,12 @@ const HorarioModal = ({
       return slots;
     };
 
-    if (selectedDate && service && profissionalId) {
+    if (
+      selectedDate &&
+      service &&
+      profissionalId &&
+      service.duracao_minutos > 0
+    ) {
       const fetchAvailability = async () => {
         setSlotsLoading(true);
         setAvailableSlots([]);
@@ -87,11 +93,7 @@ const HorarioModal = ({
           const response = await axios.get(
             `http://localhost:3001/publico/agenda/${profissionalId}?data=${dateString}`
           );
-
-          // --- CORREÇÃO APLICADA AQUI ---
-          // Agora lemos corretamente tanto os horários ocupados quanto o horário de trabalho
           const { horariosOcupados, horarioTrabalho } = response.data;
-
           const slots = calculateAvailableSlots(
             horarioTrabalho,
             horariosOcupados,
@@ -118,6 +120,7 @@ const HorarioModal = ({
       title="Selecione data e hora"
       centered
       size="md"
+      zIndex={2000}
     >
       <Group
         grow
@@ -168,7 +171,11 @@ const HorarioModal = ({
                   <Button
                     key={i}
                     variant="outline"
-                    onClick={() => onSelectSlot(slot)}
+                    onClick={() => {
+                      console.log("--- Botão de horário clicado! ---");
+                      console.log("Horário selecionado:", slot);
+                      onSelectSlot(slot);
+                    }}
                   >
                     {slot.toLocaleTimeString("pt-BR", {
                       hour: "2-digit",

@@ -14,7 +14,8 @@ import MeuFaturamentoPage from "./pages/MeuFaturamentoPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // Páginas Públicas e da Área do Cliente
-import LandingPage from "./pages/LandingPage"; // A nova página de marketing
+import LandingPage from "./pages/LandingPage";
+import DonoCadastroPage from "./pages/DonoCadastroPage"; // Importa a nova página
 import BookingPage from "./pages/BookingPage";
 import ClienteLoginPage from "./pages/ClienteLoginPage";
 import ClienteCadastroPage from "./pages/ClienteCadastroPage";
@@ -30,10 +31,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* === ROTA PRINCIPAL E PÚBLICAS === */}
-        <Route path="/" element={<LandingPage />} />{" "}
-        {/* Rota raiz agora é a Landing Page */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/agendar" element={<BookingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cadastro-dono" element={<DonoCadastroPage />} />{" "}
+        {/* ROTA ADICIONADA AQUI */}
         <Route path="/cliente/login" element={<ClienteLoginPage />} />
         <Route path="/cliente/cadastro" element={<ClienteCadastroPage />} />
         <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
