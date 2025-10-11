@@ -1,17 +1,24 @@
-// frontend/src/components/ProtectedRoute.js
 import React from "react";
-import { Navigate } from "react-router-dom";
-import AppLayout from "./AppLayout"; // Importa o novo Layout
+import { Navigate, useLocation } from "react-router-dom";
+import AppLayout from "./AppLayout";
+import useAuth from "../hooks/useAuth";
 
 const ProtectedRoute = () => {
-  const token = localStorage.getItem("token");
+  const { user } = useAuth();
+  const location = useLocation();
 
-  if (!token) {
-    return <Navigate to="/login" />;
+  if (!user) {
+    // Se não há usuário, redireciona para o login
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Se o usuário está logado, renderiza o AppLayout.
-  // O AppLayout, por sua vez, vai renderizar a página correta através do <Outlet/>.
+  // --- CORREÇÃO DE SEGURANÇA APLICADA AQUI ---
+  if (user.plano === "pendente_pagamento") {
+    // Se o plano está pendente, redireciona para a página de pagamento
+    return <Navigate to="/pagamento-pendente" replace />;
+  }
+
+  // Se o usuário está logado e o plano está ativo, mostra o painel
   return <AppLayout />;
 };
 

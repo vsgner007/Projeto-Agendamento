@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import AdminAppointmentModal from "../components/AdminAppointmentModal"; // Usando o novo modal
+import AdminAppointmentModal from "../components/AdminAppointmentModal";
 import {
   Title,
   Table,
@@ -11,7 +11,11 @@ import {
   Badge,
   SegmentedControl,
   Paper,
+  Text,
+  CopyButton,
+  TextInput,
 } from "@mantine/core";
+import { IconShare, IconCheck } from "@tabler/icons-react";
 import useAuth from "../hooks/useAuth";
 
 function AgendaPage() {
@@ -21,6 +25,11 @@ function AgendaPage() {
   const [error, setError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState("agendado");
+
+  // Constrói o link de agendamento exclusivo
+  // O 'http://' é necessário para o CopyButton funcionar corretamente.
+  // Em produção, isso seria 'https://'
+  const linkAgendamento = `http://${user?.subdomain}.localhost:3000/agendar`;
 
   const fetchAgendamentos = async () => {
     setLoading(true);
@@ -45,9 +54,7 @@ function AgendaPage() {
     fetchAgendamentos();
   }, []);
 
-  const handleAppointmentCreated = () => {
-    fetchAgendamentos();
-  };
+  const handleAppointmentCreated = () => fetchAgendamentos();
 
   const handleCancelAppointment = async (agendamentoId) => {
     if (!window.confirm("Tem certeza que deseja cancelar este agendamento?"))
@@ -112,13 +119,20 @@ function AgendaPage() {
         })}
       </Table.Td>
       <Table.Td>{ag.nome_cliente}</Table.Td>
+      <Table.Td>{ag.telefone_contato}</Table.Td>
       {rolesComVisaoCompleta.includes(user?.role) && (
         <Table.Td>{ag.nome_profissional}</Table.Td>
       )}
       <Table.Td>{ag.nome_servico}</Table.Td>
       <Table.Td>
         <Badge
-          color={ag.status === "concluido" ? "green" : "blue"}
+          color={
+            ag.status === "concluido"
+              ? "green"
+              : ag.status === "cancelado"
+              ? "red"
+              : "blue"
+          }
           variant="light"
         >
           {ag.status}
@@ -136,21 +150,23 @@ function AgendaPage() {
                 Concluir
               </Button>
             )}
-            <Button
-              variant="light"
-              color="red"
-              size="xs"
-              onClick={() => handleCancelAppointment(ag.id)}
-            >
-              Cancelar
-            </Button>
+            {ag.status !== "cancelado" && (
+              <Button
+                variant="light"
+                color="red"
+                size="xs"
+                onClick={() => handleCancelAppointment(ag.id)}
+              >
+                Cancelar
+              </Button>
+            )}
           </Group>
         </Table.Td>
       )}
     </Table.Tr>
   ));
 
-  let colSpan = 4;
+  let colSpan = 5;
   if (rolesComVisaoCompleta.includes(user?.role)) colSpan++;
   if (filtroStatus !== "concluido") colSpan++;
 
@@ -164,6 +180,33 @@ function AgendaPage() {
           </Button>
         )}
       </Group>
+
+      {user?.role === "dono" && user?.subdomain && (
+        <Paper withBorder p="md" radius="md" mb="xl">
+          <Group>
+            <IconShare size={24} />
+            <Text fw={500}>Link de Agendamento para seus Clientes</Text>
+          </Group>
+          <Text size="sm" c="dimmed" mt={4}>
+            Compartilhe este link para que seus clientes possam agendar online.
+          </Text>
+          <Group mt="sm">
+            <TextInput value={linkAgendamento} readOnly style={{ flex: 1 }} />
+            <CopyButton value={linkAgendamento} timeout={2000}>
+              {({ copied, copy }) => (
+                <Button
+                  color={copied ? "teal" : "blue"}
+                  leftSection={copied ? <IconCheck size={16} /> : null}
+                  onClick={copy}
+                >
+                  {copied ? "Copiado!" : "Copiar Link"}
+                </Button>
+              )}
+            </CopyButton>
+          </Group>
+        </Paper>
+      )}
+
       <Paper withBorder p="md" radius="md">
         <SegmentedControl
           value={filtroStatus}
@@ -175,17 +218,20 @@ function AgendaPage() {
           fullWidth
         />
       </Paper>
+
       <Title order={3} mt="xl" mb="md">
         {filtroStatus === "agendado"
           ? "Próximos Compromissos"
           : "Histórico de Serviços Finalizados"}
       </Title>
-      <Table.ScrollContainer minWidth={900}>
+
+      <Table.ScrollContainer minWidth={1000}>
         <Table striped withTableBorder withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Data e Hora</Table.Th>
               <Table.Th>Cliente</Table.Th>
+              <Table.Th>Telefone</Table.Th>
               {rolesComVisaoCompleta.includes(user?.role) && (
                 <Table.Th>Profissional</Table.Th>
               )}
@@ -200,7 +246,7 @@ function AgendaPage() {
             ) : (
               <Table.Tr>
                 <Table.Td colSpan={colSpan} align="center">
-                  Nenhum agendamento encontrado.
+                  Nenhum agendamento encontrado para este filtro.
                 </Table.Td>
               </Table.Tr>
             )}

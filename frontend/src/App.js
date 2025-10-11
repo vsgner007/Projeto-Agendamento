@@ -12,6 +12,7 @@ import EquipePage from "./pages/EquipePage";
 import ClientesPage from "./pages/ClientesPage";
 import MeuFaturamentoPage from "./pages/MeuFaturamentoPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PagamentoPendentePage from "./pages/PagamentoPendentePage";
 
 // Páginas Públicas e da Área do Cliente
 import LandingPage from "./pages/LandingPage";
@@ -31,6 +32,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* === ROTA PRINCIPAL E PÚBLICAS === */}
+        <Route path="/pagamento-pendente" element={<PagamentoPendentePage />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/agendar" element={<BookingPage />} />
         <Route path="/login" element={<LoginPage />} />
