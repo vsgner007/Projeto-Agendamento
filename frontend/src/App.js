@@ -11,12 +11,12 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import EquipePage from "./pages/EquipePage";
 import ClientesPage from "./pages/ClientesPage";
 import MeuFaturamentoPage from "./pages/MeuFaturamentoPage";
+import PrecosPage from "./pages/PrecosPage";
 import ProtectedRoute from "./components/ProtectedRoute";
-import PagamentoPendentePage from "./pages/PagamentoPendentePage";
 
 // Páginas Públicas e da Área do Cliente
 import LandingPage from "./pages/LandingPage";
-import DonoCadastroPage from "./pages/DonoCadastroPage"; // Importa a nova página
+import DonoCadastroPage from "./pages/DonoCadastroPage";
 import BookingPage from "./pages/BookingPage";
 import ClienteLoginPage from "./pages/ClienteLoginPage";
 import ClienteCadastroPage from "./pages/ClienteCadastroPage";
@@ -32,14 +32,16 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* === ROTA PRINCIPAL E PÚBLICAS === */}
-        <Route path="/pagamento-pendente" element={<PagamentoPendentePage />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/agendar" element={<BookingPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/cadastro-dono" element={<DonoCadastroPage />} />{" "}
-        {/* ROTA ADICIONADA AQUI */}
+        <Route path="/cadastro-dono" element={<DonoCadastroPage />} />
         <Route path="/cliente/login" element={<ClienteLoginPage />} />
-        <Route path="/cliente/cadastro" element={<ClienteCadastroPage />} />
+        <Route
+          path="/cliente/cadastro"
+          element={<ClienteCadastroPage />}
+        />{" "}
+        {/* Movido para a área pública */}
         <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
         <Route path="/resetar-senha/:token" element={<ResetarSenhaPage />} />
         {/* === ÁREA PROTEGIDA DO CLIENTE === */}
