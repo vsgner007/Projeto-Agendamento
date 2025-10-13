@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios"; // A LINHA QUE FALTAVA
+import api from "../api"; // CORREÇÃO: Usa a instância centralizada da API
 import {
   Container,
   Title,
@@ -24,7 +24,6 @@ import {
 import HorarioModal from "./HorarioModal";
 import { jwtDecode } from "jwt-decode";
 
-// Componente interno reutilizável para as caixas de seleção
 const SelectionBox = ({
   icon,
   title,
@@ -54,17 +53,12 @@ const SelectionBox = ({
 );
 
 const BookingFlow = ({ onBookingSuccess }) => {
-  // Estados para os dados
   const [filial, setFilial] = useState(null);
   const [profissionais, setProfissionais] = useState([]);
   const [servicos, setServicos] = useState([]);
-
-  // Estados para as seleções do usuário
   const [selectedProfissional, setSelectedProfissional] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
-
-  // Estados de UI e formulário final
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState({
     filial: true,
@@ -78,15 +72,14 @@ const BookingFlow = ({ onBookingSuccess }) => {
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
 
-  // Lógica de Subdomínio
   useEffect(() => {
     const hostnameParts = window.location.hostname.split(".");
     const subdomain =
       hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
 
     setLoading((prev) => ({ ...prev, filial: true }));
-    axios
-      .get(`http://localhost:3001/publico/filial/${subdomain}`)
+    api
+      .get(`/publico/filial/${subdomain}`)
       .then((response) => {
         setFilial(response.data);
       })
@@ -100,12 +93,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
       });
   }, []);
 
-  // Busca profissionais automaticamente quando a filial é carregada
   useEffect(() => {
     if (filial) {
       setLoading((prev) => ({ ...prev, profissionais: true }));
-      axios
-        .get(`http://localhost:3001/publico/profissionais/${filial.id}`)
+      api
+        .get(`/publico/profissionais/${filial.id}`)
         .then((response) => setProfissionais(response.data))
         .catch(() => setError("Não foi possível carregar os profissionais."))
         .finally(() =>
@@ -114,14 +106,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [filial]);
 
-  // Busca serviços quando um profissional é selecionado
   useEffect(() => {
     if (selectedProfissional) {
       setLoading((prev) => ({ ...prev, servicos: true }));
-      axios
-        .get(
-          `http://localhost:3001/publico/servicos/${selectedProfissional.id}`
-        )
+      api
+        .get(`/publico/servicos/${selectedProfissional.id}`)
         .then((response) => {
           setServicos(response.data);
         })
@@ -130,7 +119,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [selectedProfissional]);
 
-  // Pré-preenche dados se o cliente estiver logado
   useEffect(() => {
     const token = localStorage.getItem("clienteToken");
     if (token) {
@@ -166,8 +154,8 @@ const BookingFlow = ({ onBookingSuccess }) => {
     setLoading((prev) => ({ ...prev, booking: true }));
     setError("");
     try {
-      await axios.post(
-        `http://localhost:3001/publico/agendamentos-carrinho/${selectedProfissional.id}`,
+      await api.post(
+        `/publico/agendamentos-carrinho/${selectedProfissional.id}`,
         {
           servicos_ids: selectedServices.map((s) => s.id),
           nome_cliente: nomeCliente,

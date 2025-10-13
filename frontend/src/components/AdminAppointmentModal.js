@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios"; // A LINHA QUE FALTAVA
+import api from "../api"; // CORREÇÃO: Usa a instância centralizada da API
 import {
   Modal,
   Button,
@@ -67,11 +67,11 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       const fetchInitialData = async () => {
         try {
           const [servicosRes, equipeRes] = await Promise.all([
-            axios.get("http://localhost:3001/servicos", {
+            api.get("/servicos", {
               headers: { Authorization: `Bearer ${token}` },
             }),
             ["dono", "recepcionista"].includes(user?.role)
-              ? axios.get("http://localhost:3001/profissionais", {
+              ? api.get("/profissionais", {
                   headers: { Authorization: `Bearer ${token}` },
                 })
               : Promise.resolve({ data: [] }),
@@ -116,8 +116,8 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     const dateString = date.toISOString().split("T")[0];
 
     try {
-      const response = await axios.get(
-        `http://localhost:3001/publico/agenda/${professionalToQuery}?data=${dateString}`
+      const response = await api.get(
+        `/publico/agenda/${professionalToQuery}?data=${dateString}`
       );
       const { horariosOcupados, horarioTrabalho } = response.data;
 
@@ -181,8 +181,8 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     setSubmitLoading(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:3001/agendamentos",
+      await api.post(
+        "/agendamentos",
         {
           servicos_ids: selectedServices,
           nome_cliente: nomeCliente,
