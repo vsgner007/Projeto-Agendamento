@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api from "../api";
+import axios from "axios"; // A LINHA QUE FALTAVA
 import {
   Modal,
   Button,
@@ -49,7 +49,6 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const [error, setError] = useState("");
   const [loadingData, setLoadingData] = useState(true);
 
-  // Efeito para buscar dados iniciais
   useEffect(() => {
     if (opened) {
       // Reseta tudo ao abrir
@@ -68,11 +67,11 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       const fetchInitialData = async () => {
         try {
           const [servicosRes, equipeRes] = await Promise.all([
-            api.get("/servicos", {
+            axios.get("http://localhost:3001/servicos", {
               headers: { Authorization: `Bearer ${token}` },
             }),
             ["dono", "recepcionista"].includes(user?.role)
-              ? api.get("/profissionais", {
+              ? axios.get("http://localhost:3001/profissionais", {
                   headers: { Authorization: `Bearer ${token}` },
                 })
               : Promise.resolve({ data: [] }),
@@ -87,7 +86,7 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             setProfissionais(
               equipeFiltrada.map((p) => ({ value: p.id, label: p.nome }))
             );
-            // Não pré-seleciona mais para evitar o bug de 'voltar'
+            setSelectedProfissionalId(user.id);
           } else if (user) {
             setSelectedProfissionalId(user.id);
           }
@@ -101,7 +100,6 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
     }
   }, [opened, user]);
 
-  // Função para buscar horários, chamada ao clicar em uma data
   const handleDateChange = async (date) => {
     setSelectedDate(date);
     setSelectedSlot(null);
@@ -242,7 +240,6 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
               setSelectedDate(null);
               setSelectedSlot(null);
             }}
-            comboboxProps={{ dropdown: { style: { zIndex: 2001 } } }}
             required
           />
         )}

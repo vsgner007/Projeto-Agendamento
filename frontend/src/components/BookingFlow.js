@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import api from "../api";
+import axios from "axios"; // A LINHA QUE FALTAVA
 import {
   Container,
   Title,
@@ -15,6 +15,7 @@ import {
   Stack,
 } from "@mantine/core";
 import {
+  IconBuildingStore,
   IconUser,
   IconPlus,
   IconCalendar,
@@ -23,7 +24,7 @@ import {
 import HorarioModal from "./HorarioModal";
 import { jwtDecode } from "jwt-decode";
 
-// Componente interno para as caixas de seleção
+// Componente interno reutilizável para as caixas de seleção
 const SelectionBox = ({
   icon,
   title,
@@ -77,15 +78,15 @@ const BookingFlow = ({ onBookingSuccess }) => {
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
 
-  // --- LÓGICA DE SUBDOMÍNIO (RESTAURADA) ---
+  // Lógica de Subdomínio
   useEffect(() => {
     const hostnameParts = window.location.hostname.split(".");
     const subdomain =
       hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
 
     setLoading((prev) => ({ ...prev, filial: true }));
-    api
-      .get(`/publico/filial/${subdomain}`)
+    axios
+      .get(`http://localhost:3001/publico/filial/${subdomain}`)
       .then((response) => {
         setFilial(response.data);
       })
@@ -184,7 +185,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   };
 
-  // --- CORREÇÃO DO CLIQUE NO MODAL (RESTAURADA) ---
   const handleSlotSelected = useCallback((slot) => {
     setSelectedSlot(slot);
     setIsModalOpen(false);
@@ -199,7 +199,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
     0
   );
 
-  // Renderização inicial enquanto a filial carrega
   if (loading.filial) {
     return (
       <Center style={{ height: "100vh" }}>
@@ -208,7 +207,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
     );
   }
 
-  // Renderização de erro se a filial não for encontrada
   if (error) {
     return (
       <Container my="xl">
@@ -221,7 +219,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
     );
   }
 
-  // Tela de Sucesso
   if (bookingSuccess) {
     return (
       <Container my="xl">
@@ -290,8 +287,6 @@ const BookingFlow = ({ onBookingSuccess }) => {
       <Text c="dimmed" ta="center" mt={5}>
         Bem-vindo! Siga os passos para agendar seu horário.
       </Text>
-
-      {/* A caixa de seleção de filial foi REMOVIDA, como esperado */}
 
       <SelectionBox
         icon={<IconUser />}
