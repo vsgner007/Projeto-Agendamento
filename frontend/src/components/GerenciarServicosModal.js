@@ -28,8 +28,8 @@ const GerenciarServicosModal = ({ funcionario, onClose }) => {
           const resTodosServicos = await api.get("/servicos", {
             headers: { Authorization: `Bearer ${token}` },
           });
-          const resServicosAssociados = await axios.get(
-            `http://localhost:3001/profissionais/${funcionario.id}/servicos`,
+          const resServicosAssociados = await api.get(
+            `/profissionais/${funcionario.id}/servicos`,
             {
               headers: { Authorization: `Bearer ${token}` },
             }
@@ -50,8 +50,8 @@ const GerenciarServicosModal = ({ funcionario, onClose }) => {
   const handleAssociar = async (servicoId) => {
     const token = localStorage.getItem("token");
     try {
-      await axios.post(
-        `http://localhost:3001/profissionais/${funcionario.id}/servicos`,
+      await api.post(
+        `/profissionais/${funcionario.id}/servicos`,
         { servico_id: servicoId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -65,8 +65,8 @@ const GerenciarServicosModal = ({ funcionario, onClose }) => {
   const handleDesassociar = async (servicoId) => {
     const token = localStorage.getItem("token");
     try {
-      await axios.delete(
-        `http://localhost:3001/profissionais/${funcionario.id}/servicos/${servicoId}`,
+      await api.delete(
+        `/profissionais/${funcionario.id}/servicos/${servicoId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

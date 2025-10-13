@@ -48,7 +48,7 @@ function DashboardPage() {
     if (!window.confirm("Tem certeza que deseja deletar este serviço?")) return;
     try {
       const token = localStorage.getItem("token");
-      await axios.delete(`http://localhost:3001/servicos/${servicoId}`, {
+      await api.delete(`/servicos/${servicoId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setServicos(servicos.filter((servico) => servico.id !== servicoId));

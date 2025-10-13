@@ -75,8 +75,8 @@ function ConfiguracoesPage() {
     try {
       const token = localStorage.getItem("token");
       // Agora envia ambos, horários e comissão
-      await axios.put(
-        "http://localhost:3001/configuracoes",
+      await api.put(
+        "/configuracoes",
         { horarios, comissao: parseInt(comissao) },
         { headers: { Authorization: `Bearer ${token}` } }
       );

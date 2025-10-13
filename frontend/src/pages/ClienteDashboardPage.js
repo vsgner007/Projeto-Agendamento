@@ -58,12 +58,9 @@ function ClienteDashboardPage() {
       return;
     try {
       const token = localStorage.getItem("clienteToken");
-      await axios.delete(
-        `http://localhost:3001/clientes/agendamentos/${agendamentoId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await api.delete(`/clientes/agendamentos/${agendamentoId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setAgendamentos(agendamentos.filter((ag) => ag.id !== agendamentoId));
     } catch (err) {
       setError("Não foi possível cancelar o agendamento.");

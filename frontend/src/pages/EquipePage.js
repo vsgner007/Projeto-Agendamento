@@ -65,12 +65,9 @@ function EquipePage() {
     try {
       setError("");
       const token = localStorage.getItem("token");
-      await axios.delete(
-        `http://localhost:3001/profissionais/${funcionarioId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await api.delete(`/profissionais/${funcionarioId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       // Remove o funcionário da lista na tela instantaneamente
       setEquipe(equipe.filter((m) => m.id !== funcionarioId));
     } catch (err) {

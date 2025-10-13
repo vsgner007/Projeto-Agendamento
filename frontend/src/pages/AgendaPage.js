@@ -56,19 +56,15 @@ function AgendaPage() {
 
   const handleAppointmentCreated = () => fetchAgendamentos();
 
-  const handleCancelAppointment = async (agendamentoId) => {
-    if (!window.confirm("Tem certeza que deseja cancelar este agendamento?"))
-      return;
+  const handleCancelAppointment = async (agendamentoId, motivo) => {
     try {
       setError("");
       const token = localStorage.getItem("token");
-      await axios.delete(
-        `http://localhost:3001/agendamentos/${agendamentoId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      setAgendamentos(agendamentos.filter((ag) => ag.id !== agendamentoId));
+      await api.delete(`/agendamentos/${agendamentoId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { motivo },
+      });
+      fetchAgendamentos();
     } catch (err) {
       setError("Erro ao cancelar o agendamento.");
     }
@@ -78,8 +74,8 @@ function AgendaPage() {
     try {
       setError("");
       const token = localStorage.getItem("token");
-      await axios.put(
-        `http://localhost:3001/agendamentos/${agendamentoId}`,
+      await api.put(
+        `/agendamentos/${agendamentoId}`,
         { status: novoStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );

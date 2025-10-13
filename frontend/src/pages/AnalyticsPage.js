@@ -90,16 +90,14 @@ function AnalyticsPage() {
       setError("");
       setChartData(null);
       try {
-        const token = localStorage.getItem("token");
         let url = `/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`;
-
         if (selectedProfissionalId && selectedProfissionalId !== "todos") {
           url += `&profissionalId=${selectedProfissionalId}`;
         }
-
-        const response = await axios.get(url, {
+        const response = await api.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        // ... (resto da lógica para montar o gráfico)
 
         const dataFromApi = response.data;
         if (dataFromApi.length > 0) {
