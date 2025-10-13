@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Title,
   Table,
@@ -56,8 +56,8 @@ function RelatorioPage() {
       setError("");
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          `http://localhost:3001/relatorios/servicos-realizados?mes=${selectedMonth}&ano=${selectedYear}`,
+        const response = await api.get(
+          `/relatorios/servicos-realizados?mes=${selectedMonth}&ano=${selectedYear}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }

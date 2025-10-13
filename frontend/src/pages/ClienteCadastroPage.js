@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, Link } from "react-router-dom";
 import {
   TextInput,
@@ -28,7 +28,7 @@ function ClienteCadastroPage() {
     setError("");
     setLoading(true);
     try {
-      await axios.post("http://localhost:3001/clientes/cadastro", {
+      await api.post("/clientes/cadastro", {
         nome,
         email,
         telefone,

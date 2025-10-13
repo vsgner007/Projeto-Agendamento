@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { Link } from "react-router-dom";
 import {
   TextInput,
@@ -25,7 +25,7 @@ function EsqueciSenhaPage() {
     setLoading(true);
     setSuccess("");
     try {
-      await axios.post("http://localhost:3001/esqueci-senha", { email, tipo });
+      await api.post("/esqueci-senha", { email, tipo });
       setSuccess(
         "Se um usuário com este email existir em nosso sistema, um link de recuperação de senha foi enviado para ele."
       );

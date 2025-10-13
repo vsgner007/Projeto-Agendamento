@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Container,
   Title,
@@ -84,8 +84,8 @@ const BookingFlow = ({ onBookingSuccess }) => {
       hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
 
     setLoading((prev) => ({ ...prev, filial: true }));
-    axios
-      .get(`http://localhost:3001/publico/filial/${subdomain}`)
+    api
+      .get(`/publico/filial/${subdomain}`)
       .then((response) => {
         setFilial(response.data);
       })

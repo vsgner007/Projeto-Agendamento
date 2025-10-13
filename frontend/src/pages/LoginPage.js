@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import {
   TextInput,
@@ -29,7 +29,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:3001/login", {
+      const response = await api.post("/login", {
         email: email,
         senha: senha,
       });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Title,
   Table,
@@ -29,7 +29,7 @@ function DashboardPage() {
   const fetchServicos = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3001/servicos", {
+      const response = await api.get("/servicos", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setServicos(response.data);

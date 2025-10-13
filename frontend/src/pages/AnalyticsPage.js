@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Pie } from "react-chartjs-2";
 import {
@@ -60,12 +60,9 @@ function AnalyticsPage() {
     const fetchEquipe = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          "http://localhost:3001/profissionais",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const response = await api.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         // --- CORREÇÃO APLICADA AQUI ---
         // A API já retorna todos os profissionais, incluindo o dono.
         // Nós apenas formatamos a lista e adicionamos a opção "Todos".
@@ -94,7 +91,7 @@ function AnalyticsPage() {
       setChartData(null);
       try {
         const token = localStorage.getItem("token");
-        let url = `http://localhost:3001/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`;
+        let url = `/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`;
 
         if (selectedProfissionalId && selectedProfissionalId !== "todos") {
           url += `&profissionalId=${selectedProfissionalId}`;

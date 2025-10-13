@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Text,
@@ -90,8 +90,8 @@ const HorarioModal = ({
         setAvailableSlots([]);
         const dateString = selectedDate.toISOString().split("T")[0];
         try {
-          const response = await axios.get(
-            `http://localhost:3001/publico/agenda/${profissionalId}?data=${dateString}`
+          const response = await api.get(
+            `/publico/agenda/${profissionalId}?data=${dateString}`
           );
           const { horariosOcupados, horarioTrabalho } = response.data;
           const slots = calculateAvailableSlots(

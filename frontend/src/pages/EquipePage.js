@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Title,
   Table,
@@ -27,7 +27,7 @@ function EquipePage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3001/profissionais", {
+      const response = await api.get("/profissionais", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEquipe(response.data);

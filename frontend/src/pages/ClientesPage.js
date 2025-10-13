@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import { Title, Table, Loader, Alert, Paper, Text, Group } from "@mantine/core"; // 'Group' foi adicionado aqui
 import { IconUsers } from "@tabler/icons-react";
 
@@ -12,7 +12,7 @@ function ClientesPage() {
     const fetchClientes = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get("http://localhost:3001/clientes", {
+        const response = await api.get("/clientes", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setClientes(response.data);

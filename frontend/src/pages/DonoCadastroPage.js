@@ -3,7 +3,7 @@
 // https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=75d0d3c4fec54bc8a48b91311c4def1b
 
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import {
   TextInput,
@@ -61,7 +61,7 @@ function DonoCadastroPage() {
     setLoading(true);
     try {
       // Chama a "super-rota" no backend
-      await axios.post("http://localhost:3001/registrar-negocio", {
+      await api.post("/registrar-negocio", {
         nomeDono,
         emailDono,
         senhaDono,

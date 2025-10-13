@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Button,
@@ -68,11 +68,11 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       const fetchInitialData = async () => {
         try {
           const [servicosRes, equipeRes] = await Promise.all([
-            axios.get("http://localhost:3001/servicos", {
+            api.get("/servicos", {
               headers: { Authorization: `Bearer ${token}` },
             }),
             ["dono", "recepcionista"].includes(user?.role)
-              ? axios.get("http://localhost:3001/profissionais", {
+              ? api.get("/profissionais", {
                   headers: { Authorization: `Bearer ${token}` },
                 })
               : Promise.resolve({ data: [] }),

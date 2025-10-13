@@ -1,6 +1,6 @@
 // frontend/src/components/EditFuncionarioModal.js
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Button,
@@ -38,8 +38,8 @@ const EditFuncionarioModal = ({
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put(
-        `http://localhost:3001/profissionais/${funcionario.id}`,
+      const response = await api.put(
+        `/profissionais/${funcionario.id}`,
         { nome, email, role },
         { headers: { Authorization: `Bearer ${token}` } }
       );

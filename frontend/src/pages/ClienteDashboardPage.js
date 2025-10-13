@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router-dom";
 import {
   Title,
@@ -34,12 +34,9 @@ function ClienteDashboardPage() {
         navigate("/cliente/login");
         return;
       }
-      const response = await axios.get(
-        "http://localhost:3001/clientes/meus-agendamentos",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await api.get("/clientes/meus-agendamentos", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setAgendamentos(response.data);
     } catch (err) {
       setError("Não foi possível carregar seus agendamentos.");

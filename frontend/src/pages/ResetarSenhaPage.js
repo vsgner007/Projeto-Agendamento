@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   useParams,
   useSearchParams,
@@ -40,7 +40,7 @@ function ResetarSenhaPage() {
     setLoading(true);
 
     try {
-      await axios.post("http://localhost:3001/resetar-senha", {
+      await api.post("/resetar-senha", {
         token,
         tipo,
         senha,

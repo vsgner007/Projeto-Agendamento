@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import AdminAppointmentModal from "../components/AdminAppointmentModal";
 import {
   Title,
@@ -35,7 +35,7 @@ function AgendaPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3001/agendamentos", {
+      const response = await api.get("/agendamentos", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.data && Array.isArray(response.data.agendamentos)) {

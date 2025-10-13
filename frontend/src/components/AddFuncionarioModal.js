@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Button,
@@ -25,8 +25,8 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:3001/profissionais",
+      await api.post(
+        "/profissionais",
         { nome, email, senha, role },
         { headers: { Authorization: `Bearer ${token}` } }
       );

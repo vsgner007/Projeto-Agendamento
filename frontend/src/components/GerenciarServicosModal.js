@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Text,
@@ -25,12 +25,9 @@ const GerenciarServicosModal = ({ funcionario, onClose }) => {
         setError("");
         const token = localStorage.getItem("token");
         try {
-          const resTodosServicos = await axios.get(
-            "http://localhost:3001/servicos",
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
+          const resTodosServicos = await api.get("/servicos", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           const resServicosAssociados = await axios.get(
             `http://localhost:3001/profissionais/${funcionario.id}/servicos`,
             {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Title,
   Paper,
@@ -37,12 +37,9 @@ function ConfiguracoesPage() {
     const fetchConfiguracoes = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
-          "http://localhost:3001/configuracoes",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const response = await api.get("/configuracoes", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setHorarios(response.data.horarios);
         setComissao(response.data.comissao); // Salva a comissão no estado
       } catch (err) {

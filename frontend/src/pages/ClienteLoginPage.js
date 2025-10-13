@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, Link } from "react-router-dom";
 import {
   TextInput,
@@ -25,10 +25,7 @@ function ClienteLoginPage() {
     setError("");
     setLoading(true);
     try {
-      const response = await axios.post(
-        "http://localhost:3001/clientes/login",
-        { email, senha }
-      );
+      const response = await api.post("/clientes/login", { email, senha });
       localStorage.setItem("clienteToken", response.data.token); // Salva o token do cliente
       navigate("/meus-agendamentos"); // Redireciona para o painel do cliente
     } catch (err) {
