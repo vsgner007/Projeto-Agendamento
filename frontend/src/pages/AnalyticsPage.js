@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api from "../api";
+import api from "../api"; // Garante que estamos usando a instância centralizada
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { Pie } from "react-chartjs-2";
 import {
@@ -60,12 +60,9 @@ function AnalyticsPage() {
     const fetchEquipe = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await api.get(url, {
+        const response = await api.get("/profissionais", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        // --- CORREÇÃO APLICADA AQUI ---
-        // A API já retorna todos os profissionais, incluindo o dono.
-        // Nós apenas formatamos a lista e adicionamos a opção "Todos".
         const formattedProfissionais = response.data.map((p) => ({
           value: p.id,
           label: p.nome,
@@ -90,14 +87,19 @@ function AnalyticsPage() {
       setError("");
       setChartData(null);
       try {
+        // CORREÇÃO 1: Define a variável 'token' no início da função
+        const token = localStorage.getItem("token");
+
+        // CORREÇÃO 2: Declara a variável 'url' antes de usá-la
         let url = `/relatorios/faturamento-por-servico?mes=${selectedMonth}&ano=${selectedYear}`;
+
         if (selectedProfissionalId && selectedProfissionalId !== "todos") {
           url += `&profissionalId=${selectedProfissionalId}`;
         }
+
         const response = await api.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        // ... (resto da lógica para montar o gráfico)
 
         const dataFromApi = response.data;
         if (dataFromApi.length > 0) {
