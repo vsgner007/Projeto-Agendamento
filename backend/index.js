@@ -1390,74 +1390,123 @@ app.post("/criar-preferencia-assinatura", authMiddleware, async (req, res) => {
 });
 
 // ROTA WEBHOOK para receber notificações do Mercado Pago
-// app.post(
-//   "/webhook/mercadopago",
-//   express.json({ type: "application/json" }),
-//   async (req, res) => {
-//     console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---");
-//     console.log("Body:", req.body);
 
-//     try {
-//       const notification = req.body;
+app.post(
+  "/webhook/mercadopago",
+  express.json({ type: "application/json" }),
+  async (req, res) => {
+    console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---");
+    console.log("Body:", req.body);
 
-//       if (
-//         notification &&
-//         notification.type === "preapproval" &&
-//         notification.data?.id
-//       ) {
-//         const preapprovalId = notification.data.id;
-//         console.log(
-//           `[WEBHOOK] Notificação para a pré-aprovação ID: ${preapprovalId}`
-//         );
+    try {
+      const notification = req.body;
 
-//         const preapproval = new PreApproval(mpClient);
-//         const subscriptionDetails = await preapproval.get({
-//           id: preapprovalId,
-//         });
+      // A notificação de uma nova assinatura bem-sucedida tem o tipo 'preapproval'
+      if (
+        notification &&
+        notification.type === "preapproval" &&
+        notification.data?.id
+      ) {
+        const preapprovalId = notification.data.id;
+        console.log(
+          `[WEBHOOK] Notificação para a pré-aprovação ID: ${preapprovalId}`
+        );
 
-//         const payerEmail = subscriptionDetails.payer_email;
-//         const planId = subscriptionDetails.preapproval_plan_id;
-//         const status = subscriptionDetails.status;
+        // 1. Busca os detalhes da assinatura no Mercado Pago
+        const preapproval = new PreApproval(mpClient);
+        const subscriptionDetails = await preapproval.get({
+          id: preapprovalId,
+        });
+        console.log("[WEBHOOK] Detalhes da assinatura obtidos com sucesso.");
 
-//         if (status === "authorized") {
-//           console.log(
-//             `[WEBHOOK] Assinatura autorizada para o email: ${payerEmail}`
-//           );
+        const payerEmail = subscriptionDetails.payer_email;
+        const planId = subscriptionDetails.preapproval_plan_id;
+        const status = subscriptionDetails.status;
 
-//           const nomeDoPlano = Object.keys(planos).find(
-//             (key) => planos[key] === planId
-//           );
-//           if (!nomeDoPlano) {
-//             console.error(
-//               `[WEBHOOK] ERRO: ID de plano ${planId} não encontrado.`
-//             );
-//             return res.status(200).send("OK");
-//           }
+        // 2. Garante que a assinatura foi autorizada
+        if (status === "authorized") {
+          console.log(
+            `[WEBHOOK] Assinatura autorizada para o email: ${payerEmail}`
+          );
 
-//           const updateUserPlanQuery = `
-//                     UPDATE filial SET plano = $1
-//                     WHERE id = (SELECT filial_id FROM profissional WHERE email = $2 AND role = 'dono');
-//                 `;
-//           await db.query(updateUserPlanQuery, [nomeDoPlano, payerEmail]);
-//           console.log(
-//             `[WEBHOOK] SUCESSO: Plano do usuário ${payerEmail} atualizado para '${nomeDoPlano}'.`
-//           );
-//         }
-//       }
-//       res.status(200).send("OK");
-//     } catch (error) {
-//       console.error("[WEBHOOK] Erro ao processar notificação:", error);
-//       res.status(200).send("Erro interno ao processar");
-//     }
-//   }
-// );
+          // 3. Encontra qual dos nossos planos corresponde ao ID do MP
+          const nomeDoPlano = Object.keys(planos).find(
+            (key) => planos[key] === planId
+          );
+          if (!nomeDoPlano) {
+            console.error(
+              `[WEBHOOK] ERRO: ID de plano ${planId} não encontrado em nosso mapeamento.`
+            );
+            return res.status(200).send("OK"); // Responde OK para não receber a notificação de novo
+          }
+          console.log(`[WEBHOOK] Plano assinado: ${nomeDoPlano}`);
 
-app.post("/webhook/mercadopago", async (req, res) => {
-  console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---"); // Lógica futura para atualizar o plano do usuário
+          // 4. Encontra o usuário 'dono' pelo email e atualiza o plano da sua filial
+          const updateUserPlanQuery = `
+                    UPDATE filial SET plano = $1
+                    WHERE id = (SELECT filial_id FROM profissional WHERE email = $2 AND role = 'dono');
+                `;
+          const updateResult = await db.query(updateUserPlanQuery, [
+            nomeDoPlano,
+            payerEmail,
+          ]);
 
-  res.status(200).send("OK");
+          if (updateResult.rowCount > 0) {
+            console.log(
+              `[WEBHOOK] SUCESSO: Plano do usuário ${payerEmail} atualizado para '${nomeDoPlano}' no banco de dados.`
+            );
+          } else {
+            console.error(
+              `[WEBHOOK] FALHA: Nenhum usuário 'dono' com o email ${payerEmail} foi encontrado para atualizar o plano.`
+            );
+          }
+        }
+      }
+      // Responde ao Mercado Pago que a notificação foi recebida com sucesso
+      res.status(200).send("OK");
+    } catch (error) {
+      console.error("[WEBHOOK] Erro ao processar notificação:", error);
+      // Mesmo em caso de erro, respondemos 200 para o MP não ficar reenviando. O erro fica logado para nós.
+      res.status(200).send("Erro interno ao processar");
+    }
+  }
+);
+
+// 2. NOVO: Robô de Limpeza de Contas Pendentes
+console.log("Agendando robô de limpeza de contas pendentes...");
+// Agenda a tarefa para rodar uma vez por dia, às 3 da manhã.
+cron.schedule("0 3 * * *", async () => {
+  console.log(
+    `[${new Date().toLocaleString(
+      "pt-BR"
+    )}] 🤖 Robô de limpeza verificando contas pendentes...`
+  );
+  try {
+    const queryText = `
+            DELETE FROM filial
+            WHERE id IN (
+                SELECT f.id
+                FROM filial f
+                JOIN profissional p ON f.id = p.filial_id
+                WHERE f.plano = 'pendente_pagamento'
+                  AND p.role = 'dono'
+                  AND p.criado_em < NOW() - INTERVAL '72 hours'
+            );
+        `;
+
+    const result = await db.query(queryText);
+
+    if (result.rowCount > 0) {
+      console.log(
+        `🤖 SUCESSO: ${result.rowCount} conta(s) pendente(s) foram limpas.`
+      );
+    } else {
+      console.log("🤖 Nenhuma conta pendente para limpar neste ciclo.");
+    }
+  } catch (error) {
+    console.error("🤖 Erro ao executar o robô de limpeza:", error);
+  }
 });
-
 // dbdd6d20e2f447c68a6a4b58c8262ce3
 // 7bd36f48c3c54a2ca25d46b6e635f551
 // 75d0d3c4fec54bc8a48b91311c4def1b
