@@ -999,25 +999,36 @@ app.get(
 app.post("/clientes/cadastro", async (req, res) => {
   try {
     const { nome, email, telefone, senha } = req.body;
-    if (!nome || !email || !senha || !telefone)
+    if (!nome || !email || !senha || !telefone) {
       return res
         .status(400)
         .json({ message: "Todos os campos são obrigatórios." });
+    }
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senha, salt);
+
+    // A coluna 'profissional_id' é opcional e não precisa ser inserida aqui
     const queryText = `INSERT INTO cliente (nome_cliente, email_contato, telefone_contato, senha_hash) VALUES ($1, $2, $3, $4) RETURNING id, nome_cliente, email_contato;`;
+
     const result = await db.query(queryText, [
       nome,
       email,
       telefone,
       senhaHash,
     ]);
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    if (error.code === "23505")
+    // --- "ESPIÃO" ADICIONADO AQUI ---
+    // Este log irá imprimir o erro detalhado do banco de dados nos logs da Render
+    console.error("ERRO DETALHADO NO CADASTRO DE CLIENTE:", error);
+
+    if (error.code === "23505") {
+      // violação de chave única (email duplicado)
       return res
         .status(409)
         .json({ message: "Este email já está cadastrado." });
+    }
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
