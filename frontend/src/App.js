@@ -11,7 +11,6 @@ import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import EquipePage from "./pages/EquipePage";
 import ClientesPage from "./pages/ClientesPage";
 import MeuFaturamentoPage from "./pages/MeuFaturamentoPage";
-import PrecosPage from "./pages/PrecosPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // Páginas Públicas e da Área do Cliente
