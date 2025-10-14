@@ -3,7 +3,7 @@ const { Pool } = require("pg");
 
 let pool;
 
-// A variável NODE_ENV é definida automaticamente pela Render como 'production'
+// A variável NODE_ENV é definida automaticamente por plataformas como a Render como 'production'
 if (process.env.NODE_ENV === "production" && process.env.DATABASE_URL) {
   // Se estiver em produção (Render), usa a DATABASE_URL com SSL obrigatório.
   pool = new Pool({
