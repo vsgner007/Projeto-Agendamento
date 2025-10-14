@@ -21,7 +21,7 @@ const planos = [
   {
     id: "individual",
     nome: "Individual",
-    preco: "R$ 29/mês",
+    preco: "R$ 29,90/mês",
     link: "/cadastro-dono?plano=individual",
     features: [
       "1 Usuário (Dono)",
@@ -33,7 +33,7 @@ const planos = [
   {
     id: "equipe",
     nome: "Equipe",
-    preco: "R$ 79/mês",
+    preco: "R$ 79,90/mês",
     link: "/cadastro-dono?plano=equipe",
     features: [
       "Tudo do plano Individual",
@@ -45,7 +45,7 @@ const planos = [
   {
     id: "premium",
     nome: "Premium",
-    preco: "R$ 129/mês",
+    preco: "R$ 129,90/mês",
     link: "/cadastro-dono?plano=premium",
     features: [
       "Tudo do plano Equipe",
