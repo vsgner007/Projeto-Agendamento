@@ -3,18 +3,18 @@ const { Pool } = require("pg");
 
 let pool;
 
-// Verifica se estamos no ambiente de produção (Render)
-if (process.env.DATABASE_URL) {
-  // Se DATABASE_URL existe, usa a conexão de produção com SSL
+// A variável NODE_ENV é definida automaticamente pela Render como 'production'
+if (process.env.NODE_ENV === "production" && process.env.DATABASE_URL) {
+  // Se estiver em produção (Render), usa a DATABASE_URL com SSL obrigatório.
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-      rejectUnauthorized: false, // Necessário para conexões com a Render
+      rejectUnauthorized: false, // Configuração necessária para conexões com a Render
     },
   });
-  console.log("Conectando ao banco de dados de PRODUÇÃO (Render)...");
+  console.log("Banco de dados: Modo de PRODUÇÃO ativado (Render).");
 } else {
-  // Se não, usa as configurações locais do arquivo .env
+  // Caso contrário, usa as configurações locais do arquivo .env para desenvolvimento.
   pool = new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
@@ -22,7 +22,7 @@ if (process.env.DATABASE_URL) {
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
   });
-  console.log("Conectando ao banco de dados LOCAL...");
+  console.log("Banco de dados: Modo de DESENVOLVIMENTO ativado (Local).");
 }
 
 module.exports = {
