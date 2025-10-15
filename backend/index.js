@@ -11,7 +11,6 @@ const cron = require("node-cron"); // Importa o agendador
 const { enviarLembreteWhatsApp } = require("./whatsapp"); // Importa nosso módulo de WhatsApp
 const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
-//const checkPlan = require("./middleware/checkPlan");
 const app = express();
 const port = 3001;
 const { MercadoPagoConfig, PreApproval } = require("mercadopago");
@@ -486,44 +485,67 @@ app.get(
   }
 );
 
+// app.post(
+//   "/profissionais",
+//   authMiddleware,
+//   checkRole(["dono"]),
+//   checkPlan(["equipe", "premium"]),
+//   async (req, res) => {
+//     try {
+//       const donoId = req.profissional.id;
+//       const { nome, email, senha, role } = req.body;
+//       if (!nome || !email || !senha || !role)
+//         return res.status(400).json({
+//           message: "Nome, email, senha e papel (role) são obrigatórios.",
+//         });
+//       const filialResult = await db.query(
+//         "SELECT filial_id FROM profissional WHERE id = $1",
+//         [donoId]
+//       );
+//       if (!filialResult.rows[0]?.filial_id)
+//         return res.status(400).json({
+//           message: "Administrador não está associado a uma filial válida.",
+//         });
+//       const filial_id = filialResult.rows[0].filial_id;
+//       const salt = await bcrypt.genSalt(10);
+//       const senhaHash = await bcrypt.hash(senha, salt);
+//       const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role;`;
+//       const result = await db.query(queryText, [
+//         nome,
+//         email,
+//         senhaHash,
+//         role,
+//         filial_id,
+//       ]);
+//       res.status(201).json(result.rows[0]);
+//     } catch (error) {
+//       if (error.code === "23505")
+//         return res
+//           .status(409)
+//           .json({ message: "Este email já está cadastrado." });
+//       res.status(500).json({ message: "Erro interno do servidor." });
+//     }
+//   }
+// );
+
 app.post(
-  "/profissionais",
+  "/profissionais/:id/servicos",
   authMiddleware,
   checkRole(["dono"]),
-  checkPlan(["equipe", "premium"]),
   async (req, res) => {
     try {
-      const donoId = req.profissional.id;
-      const { nome, email, senha, role } = req.body;
-      if (!nome || !email || !senha || !role)
-        return res.status(400).json({
-          message: "Nome, email, senha e papel (role) são obrigatórios.",
-        });
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [donoId]
-      );
-      if (!filialResult.rows[0]?.filial_id)
-        return res.status(400).json({
-          message: "Administrador não está associado a uma filial válida.",
-        });
-      const filial_id = filialResult.rows[0].filial_id;
-      const salt = await bcrypt.genSalt(10);
-      const senhaHash = await bcrypt.hash(senha, salt);
-      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role;`;
-      const result = await db.query(queryText, [
-        nome,
-        email,
-        senhaHash,
-        role,
-        filial_id,
-      ]);
-      res.status(201).json(result.rows[0]);
+      const { id: profissional_id } = req.params;
+      const { servico_id } = req.body;
+      if (!servico_id)
+        return res
+          .status(400)
+          .json({ message: "O ID do serviço é obrigatório." });
+      const queryText = `INSERT INTO profissional_servico (profissional_id, servico_id) VALUES ($1, $2)`;
+      await db.query(queryText, [profissional_id, servico_id]);
+      res.status(201).json({ message: "Serviço associado com sucesso." });
     } catch (error) {
       if (error.code === "23505")
-        return res
-          .status(409)
-          .json({ message: "Este email já está cadastrado." });
+        return res.status(200).json({ message: "Associação já existe." });
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   }
