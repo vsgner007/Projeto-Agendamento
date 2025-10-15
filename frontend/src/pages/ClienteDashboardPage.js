@@ -14,7 +14,6 @@ import {
   SimpleGrid,
   Stack,
   SegmentedControl,
-  Paper,
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import BookingFlow from "../components/BookingFlow";

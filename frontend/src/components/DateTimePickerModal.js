@@ -49,7 +49,7 @@ const DateTimePickerModal = ({
         const dateString = selectedDate.toISOString().split("T")[0];
         try {
           const response = await api.get(
-            `http://localhost:3001/publico/agenda/${profissionalId}?data=${dateString}`
+            `/publico/agenda/${profissionalId}?data=${dateString}`
           );
           const { horariosOcupados } = response.data;
 

@@ -8,7 +8,6 @@ import {
   Alert,
   Group,
   Select,
-  Text,
   Center,
 } from "@mantine/core";
 import useAuth from "../hooks/useAuth";

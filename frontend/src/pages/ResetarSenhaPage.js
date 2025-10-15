@@ -1,11 +1,6 @@
 import React, { useState } from "react";
 import api from "../api";
-import {
-  useParams,
-  useSearchParams,
-  useNavigate,
-  Link,
-} from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import {
   PasswordInput,
   Button,
@@ -14,7 +9,6 @@ import {
   Container,
   Alert,
   Stack,
-  Text,
 } from "@mantine/core";
 import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
 

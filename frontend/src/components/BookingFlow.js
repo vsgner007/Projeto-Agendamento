@@ -15,7 +15,6 @@ import {
   Stack,
 } from "@mantine/core";
 import {
-  IconBuildingStore,
   IconUser,
   IconPlus,
   IconCalendar,

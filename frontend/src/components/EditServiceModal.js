@@ -29,7 +29,7 @@ const EditServiceModal = ({ service, onClose, onServiceUpdated }) => {
     try {
       const token = localStorage.getItem("token");
       const response = await api.put(
-        `http://localhost:3001/servicos/${service.id}`,
+        `/servicos/${service.id}`,
         {
           nome_servico: nome,
           duracao_minutos: parseInt(duracao),
