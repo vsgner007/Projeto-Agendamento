@@ -7,6 +7,7 @@ import {
   Title,
   NumberInput,
   Group,
+  Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCheck } from "@tabler/icons-react";
