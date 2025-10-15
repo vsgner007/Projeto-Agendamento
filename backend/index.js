@@ -82,18 +82,26 @@ app.post("/registrar-negocio", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // --- CORREÇÃO DE SEGURANÇA APLICADA AQUI ---
-    // Cria a filial SEMPRE com o plano 'pendente_pagamento', ignorando o que o frontend enviou.
+    // Cria um subdomínio a partir do nome da filial
+    const subdomain = nomeFilial
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
+
+    // Salva a filial com o plano pendente E o novo subdomínio
     const filialQuery =
-      "INSERT INTO filial (nome_filial, plano) VALUES ($1, $2) RETURNING id";
+      "INSERT INTO filial (nome_filial, plano, subdomain) VALUES ($1, $2, $3) RETURNING id";
     const filialResult = await client.query(filialQuery, [
       nomeFilial,
       "pendente_pagamento",
+      subdomain,
     ]);
     const novaFilialId = filialResult.rows[0].id;
 
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaDono, salt);
+
+    // Adiciona a coluna 'config_horarios' com um valor JSON padrão no INSERT
     const donoQuery =
       "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
     const defaultConfig = {
@@ -113,13 +121,6 @@ app.post("/registrar-negocio", async (req, res) => {
       novaFilialId,
       JSON.stringify(defaultConfig),
     ]);
-    await client.query(donoQuery, [
-      nomeDono,
-      emailDono,
-      senhaHash,
-      "dono",
-      novaFilialId,
-    ]);
 
     await client.query("COMMIT");
 
@@ -127,8 +128,11 @@ app.post("/registrar-negocio", async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {
-      return res.status(409).json({ message: "Este email já está em uso." });
+      return res
+        .status(409)
+        .json({ message: "Este email já está em uso por outro profissional." });
     }
+    console.error("ERRO CRÍTICO NO REGISTRO DE NEGÓCIO:", error);
     res.status(500).json({ message: "Falha ao registrar novo negócio." });
   } finally {
     client.release();

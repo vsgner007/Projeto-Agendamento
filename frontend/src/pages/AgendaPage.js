@@ -14,6 +14,8 @@ import {
   Text,
   CopyButton,
   TextInput,
+  Modal,
+  Textarea,
 } from "@mantine/core";
 import { IconShare, IconCheck } from "@tabler/icons-react";
 import useAuth from "../hooks/useAuth";
@@ -26,13 +28,19 @@ function AgendaPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState("agendado");
 
+  // Estados para o modal de cancelamento
+  const [cancelingAppointment, setCancelingAppointment] = useState(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState("");
+
   // Constrói o link de agendamento exclusivo
-  // Em produção, você substituiria 'localhost:3000' pelo seu domínio Vercel
-  const domain =
-    window.location.hostname === "localhost"
+  let linkAgendamento = "";
+  if (user?.subdomain) {
+    const domain = window.location.host.includes("localhost")
       ? "localhost:3000"
       : "book-agendamentos-mauve.vercel.app";
-  const linkAgendamento = `http://${user?.subdomain}.${domain}/agendar`;
+    const protocol = window.location.protocol;
+    linkAgendamento = `${protocol}//${user.subdomain}.${domain}/agendar`;
+  }
 
   const fetchAgendamentos = async () => {
     setLoading(true);
@@ -41,11 +49,7 @@ function AgendaPage() {
       const response = await api.get("/agendamentos", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.data && Array.isArray(response.data.agendamentos)) {
-        setAgendamentos(response.data.agendamentos);
-      } else {
-        setAgendamentos([]);
-      }
+      setAgendamentos(response.data.agendamentos || []);
     } catch (err) {
       setError("Não foi possível carregar os agendamentos.");
     } finally {
@@ -61,15 +65,21 @@ function AgendaPage() {
     fetchAgendamentos();
   };
 
-  const handleCancelAppointment = async (agendamentoId, motivo) => {
+  const handleConfirmCancel = async () => {
+    if (!motivoCancelamento) {
+      alert("Por favor, insira um motivo para o cancelamento.");
+      return;
+    }
     try {
       setError("");
       const token = localStorage.getItem("token");
-      await api.delete(`/agendamentos/${agendamentoId}`, {
+      await api.delete(`/agendamentos/${cancelingAppointment.id}`, {
         headers: { Authorization: `Bearer ${token}` },
-        data: { motivo },
+        data: { motivo: motivoCancelamento },
       });
       fetchAgendamentos();
+      setCancelingAppointment(null);
+      setMotivoCancelamento("");
     } catch (err) {
       setError("Erro ao cancelar o agendamento.");
     }
@@ -161,9 +171,7 @@ function AgendaPage() {
                 variant="light"
                 color="red"
                 size="xs"
-                onClick={() =>
-                  handleCancelAppointment(ag.id, "Cancelado pelo salão")
-                }
+                onClick={() => setCancelingAppointment(ag)}
               >
                 Cancelar
               </Button>
@@ -268,6 +276,35 @@ function AgendaPage() {
         onClose={() => setIsModalOpen(false)}
         onAppointmentCreated={handleAppointmentCreated}
       />
+
+      <Modal
+        opened={!!cancelingAppointment}
+        onClose={() => setCancelingAppointment(null)}
+        title="Cancelar Agendamento"
+        centered
+      >
+        <Text>
+          Por favor, insira o motivo do cancelamento para o agendamento de{" "}
+          <strong>{cancelingAppointment?.nome_cliente}</strong>.
+        </Text>
+        <Textarea
+          placeholder="Ex: Cliente desmarcou, não compareceu, etc."
+          value={motivoCancelamento}
+          onChange={(event) => setMotivoCancelamento(event.currentTarget.value)}
+          mt="md"
+        />
+        <Group justify="flex-end" mt="lg">
+          <Button
+            variant="default"
+            onClick={() => setCancelingAppointment(null)}
+          >
+            Fechar
+          </Button>
+          <Button color="red" onClick={handleConfirmCancel}>
+            Confirmar Cancelamento
+          </Button>
+        </Group>
+      </Modal>
     </div>
   );
 }
