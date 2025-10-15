@@ -39,8 +39,24 @@ function ConfiguracoesPage() {
         const response = await api.get("/configuracoes", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setHorarios(response.data.horarios);
-        setComissao(response.data.comissao); // Salva a comissão no estado
+
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Se os horários vierem nulos do backend, inicializamos com um padrão
+        if (!response.data.horarios) {
+          const defaultConfig = {
+            seg: "09:00-18:00",
+            ter: "09:00-18:00",
+            qua: "09:00-18:00",
+            qui: "09:00-18:00",
+            sex: "09:00-18:00",
+            sab: "09:00-14:00",
+            dom: null,
+          };
+          setHorarios(defaultConfig);
+        } else {
+          setHorarios(response.data.horarios);
+        }
+        setComissao(response.data.comissao);
       } catch (err) {
         setError("Não foi possível carregar as configurações.");
       } finally {

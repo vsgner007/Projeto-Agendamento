@@ -83,7 +83,24 @@ app.post("/registrar-negocio", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaDono, salt);
     const donoQuery =
-      "INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id";
+      "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
+    const defaultConfig = {
+      seg: "09:00-18:00",
+      ter: "09:00-18:00",
+      qua: "09:00-18:00",
+      qui: "09:00-18:00",
+      sex: "09:00-18:00",
+      sab: "09:00-14:00",
+      dom: null,
+    };
+    await client.query(donoQuery, [
+      nomeDono,
+      emailDono,
+      senhaHash,
+      "dono",
+      novaFilialId,
+      JSON.stringify(defaultConfig),
+    ]);
     await client.query(donoQuery, [
       nomeDono,
       emailDono,
