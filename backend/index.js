@@ -14,9 +14,6 @@ const { enviarEmailReset } = require("./email");
 const app = express();
 const port = 3001;
 const { MercadoPagoConfig, PreApproval } = require("mercadopago");
-app.use(cors());
-app.use(express.json());
-app.use(cors(corsOptions));
 
 const planos = {
   individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
@@ -39,6 +36,9 @@ const corsOptions = {
     }
   },
 };
+
+app.use(express.json());
+app.use(cors(corsOptions));
 
 // =================================================================
 // --- Middleware "Espião" de Planos (para depuração) ---
