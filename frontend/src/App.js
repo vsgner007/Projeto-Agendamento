@@ -23,6 +23,7 @@ import ClienteDashboardPage from "./pages/ClienteDashboardPage";
 import ProtectedClienteRoute from "./components/ProtectedClienteRoute";
 import EsqueciSenhaPage from "./pages/EsqueciSenhaPage";
 import ResetarSenhaPage from "./pages/ResetarSenhaPage";
+import PagamentoPendentePage from "./pages/PagamentoPendentePage"; // LINHA ADICIONADA AQUI
 
 import "./App.css";
 
@@ -35,13 +36,13 @@ function App() {
         <Route path="/agendar" element={<BookingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cadastro-dono" element={<DonoCadastroPage />} />
-        <Route path="/cliente/login" element={<ClienteLoginPage />} />
-        <Route path="/pagamento-pendente" element={<PagamentoPendentePage />} />
         <Route
-          path="/cliente/cadastro"
-          element={<ClienteCadastroPage />}
+          path="/pagamento-pendente"
+          element={<PagamentoPendentePage />}
         />{" "}
-        {/* Movido para a área pública */}
+        {/* Rota já estava aqui */}
+        <Route path="/cliente/login" element={<ClienteLoginPage />} />
+        <Route path="/cliente/cadastro" element={<ClienteCadastroPage />} />
         <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
         <Route path="/resetar-senha/:token" element={<ResetarSenhaPage />} />
         {/* === ÁREA PROTEGIDA DO CLIENTE === */}
