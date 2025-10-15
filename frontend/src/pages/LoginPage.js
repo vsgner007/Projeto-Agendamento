@@ -95,13 +95,6 @@ function LoginPage() {
             Entrar
           </Button>
 
-          {/* A linha de "Cadastre-se" foi removida daqui */}
-
-          <Text ta="center" mt="md" c="dimmed" size="xs">
-            <Link to="/cliente/login">
-              É um cliente? Acesse a Área do Cliente
-            </Link>
-          </Text>
           <Text ta="center" size="sm" mt="md">
             <Link to="/esqueci-senha">Esqueci minha senha</Link>
           </Text>

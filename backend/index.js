@@ -16,15 +16,28 @@ const port = 3001;
 const { MercadoPagoConfig, PreApproval } = require("mercadopago");
 app.use(cors());
 app.use(express.json());
-
-// const mpClient = new MercadoPagoConfig({
-//   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
-// });
+app.use(cors(corsOptions));
 
 const planos = {
   individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
   equipe: "7bd36f48c3c54a2ca25d46b6e635f551",
   premium: "75d0d3c4fec54bc8a48b91311c4def1b",
+};
+
+// --- CONFIGURAÇÃO DE CORS (Cross-Origin Resource Sharing) ---
+const whitelist = [
+  "http://localhost:3000", // Para seu desenvolvimento local
+  "https://booki-agendamentos-mauve.vercel.app", // A URL EXATA do seu frontend na Vercel
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error("Acesso não permitido pela política de CORS"));
+    }
+  },
 };
 
 // =================================================================
