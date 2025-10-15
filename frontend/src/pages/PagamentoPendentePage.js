@@ -8,12 +8,12 @@ function PagamentoPendentePage() {
       <Title ta="center">Pagamento Pendente</Title>
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
         <Text ta="center">
-          Sua conta foi criada com sucesso, mas parece que a sua assinatura
-          ainda não foi ativada.
+          Sua conta foi criada com sucesso, mas sua assinatura ainda não está
+          ativa.
         </Text>
         <Text ta="center" mt="md">
-          Por favor, complete o pagamento para ter acesso a todas as
-          funcionalidades.
+          Por favor, conclua o pagamento para ter acesso a todas as
+          funcionalidades do seu plano.
         </Text>
         <Button component={Link} to="/" fullWidth mt="xl">
           Ver Planos e Pagar

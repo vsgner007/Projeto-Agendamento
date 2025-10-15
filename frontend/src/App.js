@@ -36,6 +36,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cadastro-dono" element={<DonoCadastroPage />} />
         <Route path="/cliente/login" element={<ClienteLoginPage />} />
+        <Route path="/pagamento-pendente" element={<PagamentoPendentePage />} />
         <Route
           path="/cliente/cadastro"
           element={<ClienteCadastroPage />}

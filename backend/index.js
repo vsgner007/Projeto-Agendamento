@@ -60,7 +60,6 @@ const checkPlan = (planosPermitidos) => {
 app.post("/registrar-negocio", async (req, res) => {
   const client = await db.getClient();
   try {
-    await client.query("BEGIN");
     const { nomeDono, emailDono, senhaDono, nomeFilial } = req.body;
 
     if (!nomeDono || !emailDono || !senhaDono || !nomeFilial) {
@@ -69,6 +68,10 @@ app.post("/registrar-negocio", async (req, res) => {
         .json({ message: "Todos os campos são obrigatórios." });
     }
 
+    await client.query("BEGIN");
+
+    // --- CORREÇÃO DE SEGURANÇA APLICADA AQUI ---
+    // Cria a filial SEMPRE com o plano 'pendente_pagamento', ignorando o que o frontend enviou.
     const filialQuery =
       "INSERT INTO filial (nome_filial, plano) VALUES ($1, $2) RETURNING id";
     const filialResult = await client.query(filialQuery, [
