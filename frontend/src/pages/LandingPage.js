@@ -71,9 +71,6 @@ function LandingPage() {
 
           {/* MENU DESKTOP */}
           <Group visibleFrom="sm">
-            <Button component={Link} to="/cliente/login" variant="default">
-              Login do Cliente
-            </Button>
             <Button component={Link} to="/login">
               Acesso Profissional
             </Button>

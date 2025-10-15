@@ -27,9 +27,12 @@ function AgendaPage() {
   const [filtroStatus, setFiltroStatus] = useState("agendado");
 
   // Constrói o link de agendamento exclusivo
-  // O 'http://' é necessário para o CopyButton funcionar corretamente.
-  // Em produção, isso seria 'https://'
-  const linkAgendamento = `http://${user?.subdomain}.localhost:3000/agendar`;
+  // Em produção, você substituiria 'localhost:3000' pelo seu domínio Vercel
+  const domain =
+    window.location.hostname === "localhost"
+      ? "localhost:3000"
+      : "book-agendamentos-mauve.vercel.app";
+  const linkAgendamento = `http://${user?.subdomain}.${domain}/agendar`;
 
   const fetchAgendamentos = async () => {
     setLoading(true);
@@ -54,7 +57,9 @@ function AgendaPage() {
     fetchAgendamentos();
   }, []);
 
-  const handleAppointmentCreated = () => fetchAgendamentos();
+  const handleAppointmentCreated = () => {
+    fetchAgendamentos();
+  };
 
   const handleCancelAppointment = async (agendamentoId, motivo) => {
     try {
@@ -107,7 +112,12 @@ function AgendaPage() {
     );
 
   const rows = agendamentosFiltrados.map((ag) => (
-    <Table.Tr key={ag.id}>
+    <Table.Tr
+      key={ag.id}
+      style={{
+        backgroundColor: ag.status === "cancelado" ? "#fff5f5" : "transparent",
+      }}
+    >
       <Table.Td>
         {new Date(ag.data_hora_inicio).toLocaleString("pt-BR", {
           dateStyle: "short",
@@ -151,7 +161,9 @@ function AgendaPage() {
                 variant="light"
                 color="red"
                 size="xs"
-                onClick={() => handleCancelAppointment(ag.id)}
+                onClick={() =>
+                  handleCancelAppointment(ag.id, "Cancelado pelo salão")
+                }
               >
                 Cancelar
               </Button>
@@ -184,7 +196,8 @@ function AgendaPage() {
             <Text fw={500}>Link de Agendamento para seus Clientes</Text>
           </Group>
           <Text size="sm" c="dimmed" mt={4}>
-            Compartilhe este link para que seus clientes possam agendar online.
+            Compartilhe este link em suas redes sociais para que seus clientes
+            possam agendar online.
           </Text>
           <Group mt="sm">
             <TextInput value={linkAgendamento} readOnly style={{ flex: 1 }} />
