@@ -67,7 +67,7 @@ function LandingPage() {
           justify="space-between"
           style={{ height: "100%", padding: "0 16px" }}
         >
-          <Title order={3}>LookTime</Title>
+          <Title order={3}>Booki</Title>
 
           {/* MENU DESKTOP */}
           <Group visibleFrom="sm">
