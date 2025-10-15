@@ -1,6 +1,6 @@
 // frontend/src/components/DateTimePickerModal.js
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   Text,
@@ -48,7 +48,7 @@ const DateTimePickerModal = ({
         setAvailableSlots([]);
         const dateString = selectedDate.toISOString().split("T")[0];
         try {
-          const response = await axios.get(
+          const response = await api.get(
             `http://localhost:3001/publico/agenda/${profissionalId}?data=${dateString}`
           );
           const { horariosOcupados } = response.data;

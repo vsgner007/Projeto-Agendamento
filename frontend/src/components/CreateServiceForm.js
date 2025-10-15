@@ -1,45 +1,53 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api"; // CORREÇÃO: Usa a instância centralizada da API
 import {
   TextInput,
-  NumberInput,
   Button,
   Paper,
   Title,
-  Alert,
-  Stack,
+  NumberInput,
+  Group,
 } from "@mantine/core";
-import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { IconCheck } from "@tabler/icons-react";
 
 const CreateServiceForm = ({ onServiceCreated }) => {
   const [nome, setNome] = useState("");
-  const [duracao, setDuracao] = useState("");
-  const [preco, setPreco] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [duracao, setDuracao] = useState(30);
+  const [preco, setPreco] = useState(50.0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
+    setError("");
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.post(
-        "http://localhost:3001/servicos",
+      const response = await api.post(
+        "/servicos",
         {
+          // CORREÇÃO: Usa 'api' e a URL relativa
           nome_servico: nome,
-          duracao_minutos: parseInt(duracao),
-          preco: parseFloat(preco),
+          duracao_minutos: duracao,
+          preco: preco,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
-      setNome("");
-      setDuracao("");
-      setPreco("");
-      setSuccess("Serviço cadastrado com sucesso!");
+
+      notifications.show({
+        title: "Sucesso!",
+        message: "O novo serviço foi cadastrado.",
+        color: "green",
+        icon: <IconCheck />,
+      });
+
       onServiceCreated(response.data);
+      setNome("");
+      setDuracao(30);
+      setPreco(50.0);
     } catch (err) {
       setError("Erro ao cadastrar serviço. Verifique os dados.");
     } finally {
@@ -48,10 +56,10 @@ const CreateServiceForm = ({ onServiceCreated }) => {
   };
 
   return (
-    <Paper withBorder shadow="sm" p="lg" mt="md" radius="md">
+    <Paper withBorder shadow="sm" p="lg" mt="lg" radius="md">
       <Title order={4}>Cadastrar Novo Serviço</Title>
       <form onSubmit={handleSubmit}>
-        <Stack mt="md">
+        <Group grow align="flex-end" mt="md">
           <TextInput
             label="Nome do Serviço"
             placeholder="Ex: Corte Masculino"
@@ -64,41 +72,30 @@ const CreateServiceForm = ({ onServiceCreated }) => {
             placeholder="Ex: 30"
             value={duracao}
             onChange={setDuracao}
+            min={5}
+            step={5}
             required
-            min={0}
           />
           <NumberInput
             label="Preço (R$)"
             placeholder="Ex: 50.00"
             value={preco}
             onChange={setPreco}
-            precision={2}
-            step={0.5}
-            required
+            decimalScale={2}
+            fixedDecimalScale
             min={0}
+            step={5}
+            required
           />
-          <Button
-            type="submit"
-            loading={loading}
-            style={{ alignSelf: "flex-start" }}
-          >
+          <Button type="submit" loading={loading}>
             Cadastrar Serviço
           </Button>
-          {error && (
-            <Alert
-              icon={<IconAlertCircle size={16} />}
-              title="Erro"
-              color="red"
-            >
-              {error}
-            </Alert>
-          )}
-          {success && (
-            <Alert icon={<IconCheck size={16} />} title="Sucesso" color="green">
-              {success}
-            </Alert>
-          )}
-        </Stack>
+        </Group>
+        {error && (
+          <Text c="red" size="sm" mt="sm">
+            {error}
+          </Text>
+        )}
       </form>
     </Paper>
   );

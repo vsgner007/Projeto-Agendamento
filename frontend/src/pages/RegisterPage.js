@@ -1,6 +1,6 @@
 // frontend/src/pages/RegisterPage.js
 import React, { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, Link } from "react-router-dom";
 import {
   TextInput,
@@ -25,7 +25,7 @@ function RegisterPage() {
     setLoading(true);
 
     try {
-      await axios.post("http://localhost:3001/profissionais", {
+      await api.post("http://localhost:3001/profissionais", {
         nome,
         email,
         senha,

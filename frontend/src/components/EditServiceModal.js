@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Modal,
   TextInput,
@@ -28,7 +28,7 @@ const EditServiceModal = ({ service, onClose, onServiceUpdated }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put(
+      const response = await api.put(
         `http://localhost:3001/servicos/${service.id}`,
         {
           nome_servico: nome,

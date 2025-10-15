@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Title,
   Table,
@@ -54,7 +54,7 @@ function MeuFaturamentoPage() {
       setError("");
       try {
         const token = localStorage.getItem("token");
-        const response = await axios.get(
+        const response = await api.get(
           `http://localhost:3001/profissionais/meu-relatorio-financeiro?mes=${selectedMonth}&ano=${selectedYear}`,
           {
             headers: { Authorization: `Bearer ${token}` },
