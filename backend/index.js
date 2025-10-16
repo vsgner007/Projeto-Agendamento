@@ -85,17 +85,13 @@ app.post("/registrar-negocio", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // --- LÓGICA DE SUBDOMÍNIO APRIMORADA ---
-    // 1. Limpa o nome do salão para ser seguro para URL
-    const nomeSeguroDoSalao = nomeFilial
+    // Cria um subdomínio a partir do nome da filial
+    const subdomain = nomeFilial
       .toLowerCase()
-      .replace(/\s+/g, "-") // Substitui espaços por hífens
-      .replace(/[^a-z0-9-]/g, ""); // Remove caracteres especiais
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
 
-    // 2. Cria o subdomínio final no formato desejado
-    const subdomain = `${nomeSeguroDoSalao}-booki-agendamentos`;
-
-    // Salva a filial com o plano pendente E o novo subdomínio aprimorado
+    // Salva a filial com o plano pendente E o novo subdomínio
     const filialQuery =
       "INSERT INTO filial (nome_filial, plano, subdomain) VALUES ($1, $2, $3) RETURNING id";
     const filialResult = await client.query(filialQuery, [

@@ -33,11 +33,13 @@ function AgendaPage() {
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
 
   // Constrói o link de agendamento exclusivo
-  // --- LÓGICA DE URL DE PRODUÇÃO APRIMORADA ---
   let linkAgendamento = "";
   if (user?.subdomain) {
-    // Constrói a URL final sempre baseada no domínio da Vercel
-    linkAgendamento = `https://www.${user.subdomain}.vercel.app/agendar`;
+    const domain = window.location.host.includes("localhost")
+      ? "localhost:3000"
+      : "booki-agendamentos.vercel.app";
+    const protocol = window.location.protocol;
+    linkAgendamento = `${protocol}//${user.subdomain}.${domain}/agendar`;
   }
 
   const fetchAgendamentos = async () => {
