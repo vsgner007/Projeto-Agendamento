@@ -85,13 +85,13 @@ app.post("/registrar-negocio", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // Cria um subdomínio a partir do nome da filial
+    // 1. Cria um subdomínio a partir do nome da filial
     const subdomain = nomeFilial
       .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "");
+      .replace(/\s+/g, "-") // Substitui espaços por hífens
+      .replace(/[^a-z0-9-]/g, ""); // Remove caracteres especiais
 
-    // Salva a filial com o plano pendente E o novo subdomínio
+    // 2. Salva a filial com o plano pendente E o novo subdomínio
     const filialQuery =
       "INSERT INTO filial (nome_filial, plano, subdomain) VALUES ($1, $2, $3) RETURNING id";
     const filialResult = await client.query(filialQuery, [
@@ -104,9 +104,9 @@ app.post("/registrar-negocio", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaDono, salt);
 
-    // Adiciona a coluna 'config_horarios' com um valor JSON padrão no INSERT
+    // 3. Adiciona a coluna 'config_horarios' com um valor JSON padrão no INSERT
     const donoQuery =
-      "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id";
+      "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role";
     const defaultConfig = {
       seg: "09:00-18:00",
       ter: "09:00-18:00",
@@ -116,7 +116,7 @@ app.post("/registrar-negocio", async (req, res) => {
       sab: "09:00-14:00",
       dom: null,
     };
-    await client.query(donoQuery, [
+    const donoResult = await client.query(donoQuery, [
       nomeDono,
       emailDono,
       senhaHash,
@@ -127,7 +127,11 @@ app.post("/registrar-negocio", async (req, res) => {
 
     await client.query("COMMIT");
 
-    res.status(201).json({ message: "Negócio registrado com sucesso." });
+    res.status(201).json({
+      message:
+        "Negócio registrado com sucesso. Redirecionando para pagamento...",
+      user: donoResult.rows[0],
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {

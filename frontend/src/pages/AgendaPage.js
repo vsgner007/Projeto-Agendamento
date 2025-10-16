@@ -32,12 +32,14 @@ function AgendaPage() {
   const [cancelingAppointment, setCancelingAppointment] = useState(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
 
-  // Constrói o link de agendamento exclusivo
+  // Constrói o link de agendamento exclusivo de forma inteligente
   let linkAgendamento = "";
   if (user?.subdomain) {
+    // Detecta o domínio principal da Vercel, removendo qualquer subdomínio atual
     const domain = window.location.host.includes("localhost")
       ? "localhost:3000"
-      : "booki-agendamentos.vercel.app";
+      : window.location.host.split(".").slice(-2).join("."); // Ex: 'vercel.app'
+
     const protocol = window.location.protocol;
     linkAgendamento = `${protocol}//${user.subdomain}.${domain}/agendar`;
   }
