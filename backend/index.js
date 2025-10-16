@@ -31,21 +31,12 @@ const whitelist = [
 const corsOptions = {
   origin: function (origin, callback) {
     // Permite requisições sem 'origin' (como apps mobile ou Postman/Insomnia)
-    if (!origin) return callback(null, true);
-
-    // Verifica se a origem está na whitelist principal
-    if (whitelist.indexOf(origin) !== -1) {
-      return callback(null, true);
+    // e requisições cuja origem está na nossa lista de permissões.
+    if (!origin || whitelist.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Acesso não permitido pela política de CORS"));
     }
-
-    // --- LÓGICA DE SUBDOMÍNIO ---
-    // Verifica se a origem termina com '.booki-agendamentos.vercel.app'
-    // Isso permitirá 'barbearia-teste.booki-agendamentos.vercel.app', 'salao-joao.booki-agendamentos.vercel.app', etc.
-    if (origin.endsWith(".booki-agendamentos.vercel.app")) {
-      return callback(null, true);
-    }
-
-    return callback(new Error("Acesso não permitido pela política de CORS"));
   },
 };
 
