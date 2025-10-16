@@ -37,7 +37,7 @@ function AgendaPage() {
   if (user?.subdomain) {
     const domain = window.location.host.includes("localhost")
       ? "localhost:3000"
-      : "book-agendamentos-mauve.vercel.app";
+      : "booki-agendamentos-mauve.vercel.app";
     const protocol = window.location.protocol;
     linkAgendamento = `${protocol}//${user.subdomain}.${domain}/agendar`;
   }
