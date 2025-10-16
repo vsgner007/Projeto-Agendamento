@@ -24,7 +24,7 @@ const planos = {
 // --- CONFIGURAÇÃO DE CORS (Cross-Origin Resource Sharing) ---
 const whitelist = [
   "http://localhost:3000", // Para seu desenvolvimento local
-  "https://booki-agendamentos-mauve.vercel.app", // A URL EXATA do seu frontend na Vercel
+  "https://booki-agendamentos-mauve.vercel.app/", // A URL EXATA do seu frontend na Vercel
 ];
 
 const corsOptions = {
