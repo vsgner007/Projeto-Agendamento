@@ -25,6 +25,7 @@ const planos = {
 const whitelist = [
   "http://localhost:3000", // Para seu desenvolvimento local
   "https://booki-agendamentos.vercel.app", // A URL EXATA do seu frontend na Vercel
+  "https://barbearia-testebooki-agendamentos.vercel.app",
 ];
 
 const corsOptions = {
