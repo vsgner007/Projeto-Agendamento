@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import api from "../api";
-import { useNavigate, Link } from "react-router-dom";
+import {
+  useNavigate,
+  Link,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import {
   TextInput,
   PasswordInput,
@@ -10,8 +15,10 @@ import {
   Container,
   Alert,
   Text,
-} from "@mantine/core"; // Linha corrigida
-import { IconAlertCircle } from "@tabler/icons-react";
+  Anchor,
+  Group,
+} from "@mantine/core";
+import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
 
 function ClienteLoginPage() {
   const [email, setEmail] = useState("");
@@ -19,6 +26,11 @@ function ClienteLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const successMessage = location.state?.successMessage;
+  const redirectToSubdomain = searchParams.get("redirectTo"); // Pega o subdomínio da URL
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -26,8 +38,19 @@ function ClienteLoginPage() {
     setLoading(true);
     try {
       const response = await api.post("/clientes/login", { email, senha });
-      localStorage.setItem("clienteToken", response.data.token); // Salva o token do cliente
-      navigate("/meus-agendamentos"); // Redireciona para o painel do cliente
+      localStorage.setItem("clienteToken", response.data.token);
+
+      if (redirectToSubdomain) {
+        // Se veio de uma página de agendamento, reconstrói a URL e volta para lá
+        const domain = window.location.host.includes("localhost")
+          ? "localhost:3000"
+          : window.location.host;
+
+        window.location.href = `${window.location.protocol}//${redirectToSubdomain}.${domain}/agendar`;
+      } else {
+        // Se não, vai para o dashboard padrão do cliente
+        navigate("/meus-agendamentos");
+      }
     } catch (err) {
       setError("Email ou senha inválidos.");
     } finally {
@@ -38,6 +61,20 @@ function ClienteLoginPage() {
   return (
     <Container size={420} my={40}>
       <Title ta="center">Área do Cliente</Title>
+      {successMessage && (
+        <Alert
+          icon={<IconCheck size={16} />}
+          title="Sucesso!"
+          color="green"
+          withCloseButton
+          onClose={() =>
+            navigate("/cliente/login", { replace: true, state: {} })
+          }
+          mt="md"
+        >
+          {successMessage}
+        </Alert>
+      )}
       <Paper withBorder shadow="md" p={30} mt={30} radius="md">
         <form onSubmit={handleSubmit}>
           <TextInput
@@ -55,6 +92,11 @@ function ClienteLoginPage() {
             required
             mt="md"
           />
+          <Group justify="flex-end" mt="sm">
+            <Anchor component={Link} to="/esqueci-senha" size="xs">
+              Esqueci minha senha
+            </Anchor>
+          </Group>
           {error && (
             <Alert
               icon={<IconAlertCircle size={16} />}
@@ -65,7 +107,7 @@ function ClienteLoginPage() {
               {error}
             </Alert>
           )}
-          <Button fullWidth mt="xl" type="submit" loading={loading}>
+          <Button fullWidth mt="lg" type="submit" loading={loading}>
             Entrar
           </Button>
           <Text ta="center" mt="md">
@@ -73,9 +115,6 @@ function ClienteLoginPage() {
           </Text>
           <Text ta="center" mt="md">
             <Link to="/login">Acesso Profissional</Link>
-          </Text>
-          <Text ta="center" size="sm" mt="md">
-            <Link to="/esqueci-senha">Esqueci minha senha</Link>
           </Text>
         </form>
       </Paper>

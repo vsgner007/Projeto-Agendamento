@@ -25,8 +25,8 @@ import {
 import HorarioModal from "./HorarioModal";
 import ClienteLoginModal from "./ClienteLoginModal";
 import { jwtDecode } from "jwt-decode";
+import { useNavigate } from "react-router-dom";
 
-// Componente interno reutilizável para as caixas de seleção
 const SelectionBox = ({
   icon,
   title,
@@ -56,17 +56,14 @@ const SelectionBox = ({
 );
 
 const BookingFlow = ({ onBookingSuccess }) => {
-  // Estados para os dados da filial e profissionais/serviços
+  const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [filial, setFilial] = useState(null);
   const [profissionais, setProfissionais] = useState([]);
   const [servicos, setServicos] = useState([]);
-
-  // Estados para as seleções do usuário
   const [selectedProfissional, setSelectedProfissional] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
-
-  // Estados de UI e formulário final
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -78,15 +75,37 @@ const BookingFlow = ({ onBookingSuccess }) => {
   });
   const [error, setError] = useState("");
   const [bookingSuccess, setBookingSuccess] = useState(false);
-
-  // Estados dos campos do formulário
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
   const [senhaCliente, setSenhaCliente] = useState("");
 
-  // 1. Lógica de Subdomínio para carregar a filial automaticamente
+  // --- NOVA LÓGICA DE AUTENTICAÇÃO PRIMEIRO ---
   useEffect(() => {
+    const token = localStorage.getItem("clienteToken");
+    const hostnameParts = window.location.hostname.split(".");
+    const subdomain =
+      hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
+
+    if (token) {
+      try {
+        jwtDecode(token); // Apenas verifica se o token é válido
+        setIsAuthenticated(true); // Se for válido, libera a renderização da página
+      } catch (e) {
+        // Se o token for inválido, limpa e redireciona para o login
+        localStorage.removeItem("clienteToken");
+        navigate(`/cliente/login?redirectTo=${subdomain}`);
+      }
+    } else {
+      // Se não há token, redireciona para o login, passando o subdomínio
+      navigate(`/cliente/login?redirectTo=${subdomain}`);
+    }
+  }, [navigate]);
+
+  // Busca a filial se autenticado
+  useEffect(() => {
+    if (!isAuthenticated) return; // Não executa o resto se não estiver autenticado
+
     const hostnameParts = window.location.hostname.split(".");
     const subdomain =
       hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
@@ -105,9 +124,9 @@ const BookingFlow = ({ onBookingSuccess }) => {
       .finally(() => {
         setLoading((prev) => ({ ...prev, filial: false }));
       });
-  }, []);
+  }, [isAuthenticated]);
 
-  // 2. Busca profissionais automaticamente quando a filial é carregada
+  // Busca profissionais quando a filial é carregada
   useEffect(() => {
     if (filial) {
       setLoading((prev) => ({ ...prev, profissionais: true }));
@@ -121,7 +140,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [filial]);
 
-  // 3. Busca serviços quando um profissional é selecionado
+  // Busca serviços quando um profissional é selecionado
   useEffect(() => {
     if (selectedProfissional) {
       setLoading((prev) => ({ ...prev, servicos: true }));
@@ -135,7 +154,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [selectedProfissional]);
 
-  // 4. Verifica se há um cliente logado ao carregar e pré-preenche os dados
+  // Pré-preenche dados do cliente logado
   useEffect(() => {
     const token = localStorage.getItem("clienteToken");
     if (token) {
@@ -146,7 +165,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
         setTelefoneCliente(decoded.telefone || "");
         setIsLoggedIn(true);
       } catch (e) {
-        localStorage.removeItem("clienteToken"); // Limpa token inválido
+        localStorage.removeItem("clienteToken");
       }
     }
   }, []);
@@ -179,7 +198,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
           email_cliente: emailCliente,
-          senha_cliente: senhaCliente, // Envia a senha se for um novo cliente
+          senha_cliente: senhaCliente,
           data_hora_inicio: selectedSlot.toISOString(),
         }
       );
@@ -216,6 +235,14 @@ const BookingFlow = ({ onBookingSuccess }) => {
     (acc, s) => acc + parseFloat(s.preco || 0),
     0
   );
+
+  if (!isAuthenticated) {
+    return (
+      <Center style={{ height: "100vh" }}>
+        <Loader />
+      </Center>
+    );
+  }
 
   if (loading.filial) {
     return (
