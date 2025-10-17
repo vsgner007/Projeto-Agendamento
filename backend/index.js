@@ -1311,6 +1311,74 @@ app.get(
   }
 );
 
+app.put(
+  "/clientes/:id",
+  authMiddleware,
+  checkRole(["dono", "recepcionista"]),
+  async (req, res) => {
+    try {
+      const { id: clienteId } = req.params;
+      const { nome_cliente, email_contato, telefone_contato } = req.body;
+
+      if (!nome_cliente || !email_contato || !telefone_contato) {
+        return res
+          .status(400)
+          .json({ message: "Todos os campos são obrigatórios." });
+      }
+
+      // Verifica se o profissional logado tem permissão para editar este cliente
+      // (ou seja, se o cliente pertence à mesma filial)
+      const { id: profissional_id, role } = req.profissional;
+      const permissaoQuery = `
+            SELECT c.id FROM cliente c
+            JOIN carrinho_agendamento ca ON c.id = ca.cliente_id
+            JOIN profissional p ON ca.profissional_id = p.id
+            WHERE c.id = $1 AND p.filial_id = (
+                SELECT filial_id FROM profissional WHERE id = $2
+            )
+            LIMIT 1;
+        `;
+      const permissaoResult = await db.query(permissaoQuery, [
+        clienteId,
+        profissional_id,
+      ]);
+
+      if (permissaoResult.rows.length === 0) {
+        return res
+          .status(403)
+          .json({
+            message: "Você não tem permissão para editar este cliente.",
+          });
+      }
+
+      // Atualiza o cliente
+      const queryText = `
+            UPDATE cliente 
+            SET nome_cliente = $1, email_contato = $2, telefone_contato = $3, atualizado_em = NOW()
+            WHERE id = $4
+            RETURNING id, nome_cliente, email_contato, telefone_contato;
+        `;
+      const result = await db.query(queryText, [
+        nome_cliente,
+        email_contato,
+        telefone_contato,
+        clienteId,
+      ]);
+
+      res.status(200).json(result.rows[0]);
+    } catch (error) {
+      if (error.code === "23505") {
+        // Email duplicado
+        return res
+          .status(409)
+          .json({ message: "Este email já está em uso por outro cliente." });
+      }
+      console.error("Erro ao atualizar cliente:", error);
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
+
 app.post("/esqueci-senha", async (req, res) => {
   try {
     const { email, tipo } = req.body;
