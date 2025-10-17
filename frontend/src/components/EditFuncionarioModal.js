@@ -1,16 +1,6 @@
-// frontend/src/components/EditFuncionarioModal.js
 import React, { useState, useEffect } from "react";
 import api from "../api";
-import {
-  Modal,
-  Button,
-  Group,
-  Select,
-  TextInput,
-  Stack,
-  Alert,
-} from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { Modal, Button, TextInput, Select, Stack, Alert } from "@mantine/core";
 
 const EditFuncionarioModal = ({
   funcionario,
@@ -20,35 +10,41 @@ const EditFuncionarioModal = ({
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("funcionario");
-
+  const [especialidade, setEspecialidade] = useState(""); // Novo estado
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Preenche o formulário com os dados do funcionário quando o modal abre
   useEffect(() => {
     if (funcionario) {
       setNome(funcionario.nome);
       setEmail(funcionario.email);
       setRole(funcionario.role);
+      setEspecialidade(funcionario.especialidade || ""); // Preenche o campo
+      setError("");
     }
   }, [funcionario]);
 
   const handleSubmit = async () => {
-    setError("");
     setLoading(true);
+    setError("");
     try {
       const token = localStorage.getItem("token");
       const response = await api.put(
         `/profissionais/${funcionario.id}`,
-        { nome, email, role },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          nome,
+          email,
+          role,
+          especialidade, // Envia a atualização
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
       onFuncionarioUpdated(response.data);
-      onClose();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          "Não foi possível atualizar o funcionário."
+        err.response?.data?.message || "Não foi possível salvar as alterações."
       );
     } finally {
       setLoading(false);
@@ -61,7 +57,7 @@ const EditFuncionarioModal = ({
     <Modal
       opened={!!funcionario}
       onClose={onClose}
-      title={`Editar Membro: ${funcionario.nome}`}
+      title="Editar Membro da Equipe"
       centered
     >
       <Stack>
@@ -76,30 +72,34 @@ const EditFuncionarioModal = ({
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
           required
+          type="email"
         />
+
+        <TextInput
+          label="Especialidade / Cargo"
+          placeholder="Ex: Barbeiro, Manicure, Esteticista"
+          value={especialidade}
+          onChange={(e) => setEspecialidade(e.currentTarget.value)}
+        />
+
         <Select
-          label="Papel (Permissão)"
-          data={[
-            { value: "funcionario", label: "Funcionário" },
-            { value: "dono", label: "Dono" },
-          ]}
+          label="Papel no Sistema"
           value={role}
           onChange={setRole}
+          data={[
+            {
+              value: "funcionario",
+              label: "Funcionário (Barbeiro, Manicure, etc.)",
+            },
+            { value: "recepcionista", label: "Recepcionista" },
+            { value: "dono", label: "Dono" },
+          ]}
           required
         />
-        {error && (
-          <Alert icon={<IconAlertCircle size={16} />} color="red" title="Erro">
-            {error}
-          </Alert>
-        )}
-        <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} loading={loading}>
-            Salvar Alterações
-          </Button>
-        </Group>
+        {error && <Alert color="red">{error}</Alert>}
+        <Button onClick={handleSubmit} loading={loading}>
+          Salvar Alterações
+        </Button>
       </Stack>
     </Modal>
   );

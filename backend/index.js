@@ -386,7 +386,13 @@ app.post(
   async (req, res) => {
     try {
       const donoId = req.profissional.id;
-      const { nome, email, senha, role } = req.body;
+      const { nome, email, senha, role, especialidade } = req.body;
+
+      if (!nome || !email || !senha || !role)
+        return res.status(400).json({
+          message: "Nome, email, senha e papel (role) são obrigatórios.",
+        });
+
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [donoId]
@@ -396,16 +402,20 @@ app.post(
           message: "Administrador não está associado a uma filial válida.",
         });
       const filial_id = filialResult.rows[0].filial_id;
+
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
-      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role;`;
+
+      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id, especialidade) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role, especialidade;`;
       const result = await db.query(queryText, [
         nome,
         email,
         senhaHash,
         role,
         filial_id,
+        especialidade,
       ]);
+
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")
@@ -434,7 +444,6 @@ app.get(
           .json({ message: "Usuário não está associado a uma filial." });
       const filial_id = filialResult.rows[0].filial_id;
 
-      // 3. Adiciona 'especialidade' ao SELECT
       const queryText = `SELECT id, nome, email, role, especialidade FROM profissional WHERE filial_id = $1 ORDER BY nome;`;
       const result = await db.query(queryText, [filial_id]);
 
@@ -452,7 +461,6 @@ app.put(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.params;
-      // 4. Recebe 'especialidade' para atualização
       const { nome, email, role, especialidade } = req.body;
 
       if (!nome || !email || !role)
@@ -460,7 +468,6 @@ app.put(
           .status(400)
           .json({ message: "Nome, email e papel são obrigatórios." });
 
-      // 5. Adiciona 'especialidade' ao UPDATE
       const queryText = `UPDATE profissional SET nome = $1, email = $2, role = $3, especialidade = $4 WHERE id = $5 RETURNING id, nome, email, role, especialidade;`;
       const result = await db.query(queryText, [
         nome,

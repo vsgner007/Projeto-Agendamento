@@ -80,7 +80,6 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioAdded }) => {
           type="email"
         />
 
-        {/* Novo campo de Especialidade */}
         <TextInput
           label="Especialidade / Cargo"
           placeholder="Ex: Barbeiro, Manicure, Esteticista"
