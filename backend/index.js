@@ -1106,6 +1106,62 @@ app.get(
   }
 );
 
+app.get(
+  "/relatorios/faturamento-por-profissional",
+  authMiddleware,
+  checkRole(["dono"]),
+  async (req, res) => {
+    try {
+      const { id: dono_id } = req.profissional;
+      const { mes, ano } = req.query;
+      if (!mes || !ano)
+        return res.status(400).json({ message: "Mês e ano são obrigatórios." });
+
+      // 1. Busca a comissão da filial
+      const comissaoQuery = `SELECT comissao_percentual FROM filial WHERE id = (SELECT filial_id FROM profissional WHERE id = $1)`;
+      const comissaoResult = await db.query(comissaoQuery, [dono_id]);
+      const comissao = comissaoResult.rows[0]?.comissao_percentual || 0;
+
+      // 2. Busca o faturamento bruto de cada profissional da filial
+      const faturamentoQuery = `
+          SELECT 
+              p.id as profissional_id,
+              p.nome as nome_profissional,
+              SUM(ca.preco_total) as faturamento_bruto
+          FROM carrinho_agendamento ca
+          JOIN profissional p ON ca.profissional_id = p.id
+          WHERE p.filial_id = (SELECT filial_id FROM profissional WHERE id = $1)
+            AND ca.status = 'concluido'
+            AND EXTRACT(MONTH FROM ca.data_hora_inicio) = $2
+            AND EXTRACT(YEAR FROM ca.data_hora_inicio) = $3
+          GROUP BY p.id, p.nome
+          ORDER BY p.nome;
+      `;
+      const faturamentoResult = await db.query(faturamentoQuery, [
+        dono_id,
+        mes,
+        ano,
+      ]);
+
+      // 3. Calcula o valor a receber para cada profissional
+      const relatorio = faturamentoResult.rows.map((item) => {
+        const faturamentoBruto = parseFloat(item.faturamento_bruto);
+        const valorAReceber = faturamentoBruto * (1 - comissao / 100);
+        return {
+          ...item,
+          faturamento_bruto: faturamentoBruto.toFixed(2),
+          valor_a_receber: valorAReceber.toFixed(2),
+        };
+      });
+
+      res.status(200).json(relatorio);
+    } catch (error) {
+      console.error("Erro ao gerar faturamento por profissional:", error);
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
+
 // --- ROTAS DE CLIENTE (AUTENTICAÇÃO) ---
 app.post("/clientes/cadastro", async (req, res) => {
   try {
