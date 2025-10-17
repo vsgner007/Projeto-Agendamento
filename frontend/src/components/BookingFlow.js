@@ -115,34 +115,28 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [navigate]);
 
-  // 2. Busca dados da filial e do cliente (se autenticado)
+  // 2. Busca dados da filial (se autenticado)
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Busca Filial
     const hostnameParts = window.location.hostname.split(".");
     const subdomain =
       hostnameParts[0] === "localhost" ? "principal" : hostnameParts[0];
+
     setLoading((prev) => ({ ...prev, filial: true }));
     api
       .get(`/publico/filial/${subdomain}`)
-      .then((response) => setFilial(response.data))
-      .catch(() => setError(`O salão "${subdomain}" não foi encontrado.`))
-      .finally(() => setLoading((prev) => ({ ...prev, filial: false })));
-
-    // Busca Dados do Cliente
-    const token = localStorage.getItem("clienteToken");
-    if (token) {
-      try {
-        const decoded = jwtDecode(token);
-        setNomeCliente(decoded.nome || "");
-        setEmailCliente(decoded.email || "");
-        setTelefoneCliente(decoded.telefone || "");
-        setIsLoggedIn(true);
-      } catch (e) {
-        localStorage.removeItem("clienteToken");
-      }
-    }
+      .then((response) => {
+        setFilial(response.data);
+      })
+      .catch(() => {
+        setError(
+          `O salão "${subdomain}" não foi encontrado ou está indisponível.`
+        );
+      })
+      .finally(() => {
+        setLoading((prev) => ({ ...prev, filial: false }));
+      });
   }, [isAuthenticated]);
 
   // 3. Busca agendamentos do cliente (se a visão mudar)
@@ -167,23 +161,66 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [isAuthenticated, view]);
 
-  // ... (outros useEffects para buscar profissionais e serviços)
+  // --- LÓGICA RESTAURADA ---
+  // 4. Busca profissionais quando a filial é carregada
   useEffect(() => {
     if (filial) {
-      /* ... busca profissionais ... */
+      setLoading((prev) => ({ ...prev, profissionais: true }));
+      api
+        .get(`/publico/profissionais/${filial.id}`)
+        .then((response) => setProfissionais(response.data))
+        .catch(() => setError("Não foi possível carregar os profissionais."))
+        .finally(() =>
+          setLoading((prev) => ({ ...prev, profissionais: false }))
+        );
     }
   }, [filial]);
+
+  // --- LÓGICA RESTAURADA ---
+  // 5. Busca serviços quando um profissional é selecionado
   useEffect(() => {
     if (selectedProfissional) {
-      /* ... busca serviços ... */
+      setLoading((prev) => ({ ...prev, servicos: true }));
+      api
+        .get(`/publico/servicos/${selectedProfissional.id}`)
+        .then((response) => {
+          setServicos(response.data);
+        })
+        .catch(() => setError("Não foi possível carregar os serviços."))
+        .finally(() => setLoading((prev) => ({ ...prev, servicos: false })));
     }
   }, [selectedProfissional]);
 
+  // 6. Pré-preenche dados do cliente logado
+  useEffect(() => {
+    const token = localStorage.getItem("clienteToken");
+    if (token) {
+      try {
+        const decoded = jwtDecode(token);
+        setNomeCliente(decoded.nome || "");
+        setEmailCliente(decoded.email || "");
+        setTelefoneCliente(decoded.telefone || "");
+        setIsLoggedIn(true);
+      } catch (e) {
+        localStorage.removeItem("clienteToken");
+      }
+    }
+  }, []);
+
   const handleSelectProfissional = (profissional) => {
-    /* ... (sem alteração) ... */
+    setSelectedProfissional(profissional);
+    setServicos([]);
+    setSelectedServices([]);
+    setSelectedSlot(null);
   };
+
   const handleServiceToggle = (servico) => {
-    /* ... (sem alteração) ... */
+    setSelectedServices((currentServices) =>
+      currentServices.some((s) => s.id === servico.id)
+        ? currentServices.filter((s) => s.id !== servico.id)
+        : [...currentServices, servico]
+    );
+    setSelectedSlot(null);
   };
 
   const handleBookingSubmit = async (e) => {
@@ -216,10 +253,16 @@ const BookingFlow = ({ onBookingSuccess }) => {
   };
 
   const handleLoginSuccess = (user) => {
-    /* ... (sem alteração) ... */
+    setNomeCliente(user.nome || "");
+    setEmailCliente(user.email || "");
+    setTelefoneCliente(user.telefone || "");
+    setIsLoggedIn(true);
+    setIsLoginModalOpen(false);
   };
+
   const handleSlotSelected = useCallback((slot) => {
-    /* ... (sem alteração) ... */
+    setSelectedSlot(slot);
+    setIsModalOpen(false);
   }, []);
 
   const duracaoTotal = selectedServices.reduce(
@@ -231,13 +274,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
     0
   );
 
-  // Lógica de logout
   const handleLogout = () => {
     localStorage.removeItem("clienteToken");
-    navigate(0); // Recarrega a página, o que acionará o redirecionamento para o login
+    navigate(0);
   };
 
-  // Funções e lógicas copiadas do ClienteDashboardPage
   const handleCancelAgendamento = async (agendamentoId) => {
     if (
       !window.confirm("Você tem certeza que deseja cancelar este agendamento?")
@@ -248,7 +289,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
       await api.delete(`/clientes/agendamentos/${agendamentoId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      fetchAgendamentos(); // Recarrega a lista
+      fetchAgendamentos();
     } catch (err) {
       setError("Não foi possível cancelar o agendamento.");
     }
@@ -284,7 +325,63 @@ const BookingFlow = ({ onBookingSuccess }) => {
   }
 
   if (bookingSuccess) {
-    /* ... (tela de sucesso, sem alterações) ... */
+    return (
+      <Container my="xl">
+        <Paper withBorder shadow="md" p="xl" radius="md">
+          <Center>
+            <IconCheck size={48} color="green" />
+          </Center>
+          <Title order={2} ta="center" mt="md">
+            Agendamento Confirmado!
+          </Title>
+          <Text ta="center" mt="sm" c="dimmed">
+            Olá, {nomeCliente}! Seu horário foi agendado com sucesso.
+          </Text>
+          <Paper withBorder p="md" mt="lg" radius="sm" bg="gray.0">
+            <Text>
+              <strong>Serviços:</strong>
+            </Text>
+            <ul>
+              {selectedServices.map((s) => (
+                <li key={s.id}>{s.nome_servico}</li>
+              ))}
+            </ul>
+            <Text>
+              <strong>Profissional:</strong> {selectedProfissional.nome}
+            </Text>
+            <Text>
+              <strong>Unidade:</strong> {filial.nome_filial}
+            </Text>
+            <Text>
+              <strong>Data:</strong>{" "}
+              {selectedSlot.toLocaleDateString("pt-BR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </Text>
+            <Text>
+              <strong>Horário:</strong>{" "}
+              {selectedSlot.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          </Paper>
+          <Button
+            fullWidth
+            mt="xl"
+            onClick={() => {
+              setBookingSuccess(false);
+              setView("meusAgendamentos");
+              fetchAgendamentos();
+            }}
+          >
+            Ver Meus Agendamentos
+          </Button>
+        </Paper>
+      </Container>
+    );
   }
 
   return (
