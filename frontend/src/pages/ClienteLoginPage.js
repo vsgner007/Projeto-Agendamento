@@ -41,11 +41,13 @@ function ClienteLoginPage() {
       localStorage.setItem("clienteToken", response.data.token);
 
       if (redirectToSubdomain) {
-        // Se veio de uma página de agendamento, reconstrói a URL e volta para lá
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Pega o domínio principal, removendo qualquer subdomínio que já exista
         const domain = window.location.host.includes("localhost")
           ? "localhost:3000"
-          : window.location.host;
+          : window.location.host.split(".").slice(-2).join("."); // Ex: 'vercel.app'
 
+        // Reconstrói a URL correta
         window.location.href = `${window.location.protocol}//${redirectToSubdomain}.${domain}/agendar`;
       } else {
         // Se não, vai para o dashboard padrão do cliente
@@ -112,6 +114,9 @@ function ClienteLoginPage() {
           </Button>
           <Text ta="center" mt="md">
             Não tem uma conta? <Link to="/cliente/cadastro">Cadastre-se</Link>
+          </Text>
+          <Text ta="center" mt="md">
+            <Link to="/login">Acesso Profissional</Link>
           </Text>
         </form>
       </Paper>
