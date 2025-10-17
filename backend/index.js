@@ -1326,9 +1326,7 @@ app.put(
           .json({ message: "Todos os campos são obrigatórios." });
       }
 
-      // Verifica se o profissional logado tem permissão para editar este cliente
-      // (ou seja, se o cliente pertence à mesma filial)
-      const { id: profissional_id, role } = req.profissional;
+      const { id: profissional_id } = req.profissional;
       const permissaoQuery = `
             SELECT c.id FROM cliente c
             JOIN carrinho_agendamento ca ON c.id = ca.cliente_id
@@ -1351,10 +1349,11 @@ app.put(
           });
       }
 
-      // Atualiza o cliente
+      // --- CORREÇÃO APLICADA AQUI ---
+      // Removida a coluna "atualizado_em = NOW()" que não existe na tabela 'cliente'
       const queryText = `
             UPDATE cliente 
-            SET nome_cliente = $1, email_contato = $2, telefone_contato = $3, atualizado_em = NOW()
+            SET nome_cliente = $1, email_contato = $2, telefone_contato = $3
             WHERE id = $4
             RETURNING id, nome_cliente, email_contato, telefone_contato;
         `;
@@ -1368,7 +1367,6 @@ app.put(
       res.status(200).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505") {
-        // Email duplicado
         return res
           .status(409)
           .json({ message: "Este email já está em uso por outro cliente." });
