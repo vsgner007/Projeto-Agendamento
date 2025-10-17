@@ -743,17 +743,12 @@ app.delete(
 
 // --- Agendamentos ---
 app.get("/agendamentos", authMiddleware, async (req, res) => {
-  // ... (código já existente e correto)
-});
-
-// --- ROTA CORRIGIDA ---
-app.get("/agendamentos", authMiddleware, async (req, res) => {
   try {
     const { id: profissional_id, role } = req.profissional;
     let queryText;
     let values;
 
-    // Query base corrigida para ser mais robusta e incluir o telefone do cliente
+    // Query base corrigida para ser mais robusta e incluir todas as colunas necessárias
     const baseQuery = `
           SELECT 
               ca.id, 
@@ -764,7 +759,7 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
               c.telefone_contato, 
               p.nome as nome_profissional,
               (
-                  SELECT COALESCE(STRING_AGG(s.nome_servico, ', '), 'Serviço não informado')
+                  SELECT COALESCE(STRING_AGG(s.nome_servico, ', '), 'N/A')
                   FROM servico s 
                   JOIN carrinho_servico cs ON s.id = cs.servico_id 
                   WHERE cs.carrinho_id = ca.id
@@ -810,6 +805,108 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
     res
       .status(500)
       .json({ message: "Erro interno do servidor ao listar agendamentos." });
+  }
+});
+
+// --- ROTA CORRIGIDA ---
+app.post("/agendamentos", authMiddleware, async (req, res) => {
+  const client = await db.getClient();
+  try {
+    await client.query("BEGIN");
+    const { id: logado_id, role } = req.profissional;
+    const {
+      servicos_ids,
+      nome_cliente,
+      telefone_cliente,
+      email_cliente,
+      data_hora_inicio,
+      agendado_para_id,
+    } = req.body;
+
+    const profissional_final_id =
+      role === "dono" || role === "recepcionista"
+        ? agendado_para_id
+        : logado_id;
+    if (
+      !servicos_ids ||
+      servicos_ids.length === 0 ||
+      !nome_cliente ||
+      !telefone_cliente ||
+      !email_cliente ||
+      !data_hora_inicio ||
+      !profissional_final_id
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Todos os campos são obrigatórios." });
+    }
+
+    // Busca informações dos serviços para calcular duração e preço
+    const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
+    const servicosInfoResult = await client.query(servicosInfoQuery, [
+      servicos_ids,
+    ]);
+    if (servicosInfoResult.rows.length !== servicos_ids.length) {
+      throw new Error(
+        "Um ou mais serviços selecionados não foram encontrados."
+      );
+    }
+
+    const duracao_total_minutos = servicosInfoResult.rows.reduce(
+      (acc, s) => acc + s.duracao_minutos,
+      0
+    );
+    const preco_total = servicosInfoResult.rows.reduce(
+      (acc, s) => acc + parseFloat(s.preco),
+      0
+    );
+    const dataInicio = new Date(data_hora_inicio);
+    const dataFim = new Date(
+      dataInicio.getTime() + duracao_total_minutos * 60000
+    );
+
+    // Encontra ou cria o cliente
+    let cliente;
+    const clienteExistente = await client.query(
+      "SELECT * FROM cliente WHERE email_contato = $1",
+      [email_cliente]
+    );
+    if (clienteExistente.rows.length > 0) {
+      cliente = clienteExistente.rows[0];
+    } else {
+      const novoCliente = await client.query(
+        "INSERT INTO cliente (nome_cliente, telefone_contato, email_contato) VALUES ($1, $2, $3) RETURNING *",
+        [nome_cliente, telefone_cliente, email_cliente]
+      );
+      cliente = novoCliente.rows[0];
+    }
+
+    // 1. Cria o registro principal do agendamento
+    const carrinhoQuery = `INSERT INTO carrinho_agendamento (data_hora_inicio, data_hora_fim, preco_total, duracao_total_minutos, profissional_id, cliente_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
+    const carrinhoResult = await client.query(carrinhoQuery, [
+      dataInicio.toISOString(),
+      dataFim.toISOString(),
+      preco_total,
+      duracao_total_minutos,
+      profissional_final_id,
+      cliente.id,
+    ]);
+    const carrinho_id = carrinhoResult.rows[0].id;
+
+    // 2. LÓGICA RESTAURADA: Salva a associação entre o agendamento e os serviços
+    const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
+    for (const servico_id of servicos_ids) {
+      await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
+    }
+
+    await client.query("COMMIT");
+    res.status(201).json(carrinhoResult.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao criar agendamento manual:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  } finally {
+    client.release();
   }
 });
 
