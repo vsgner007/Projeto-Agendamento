@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import api from "../api";
+import api from "../api"; // CORREÇÃO: Usa a instância centralizada da API
 import {
   Title,
   Table,
@@ -54,8 +54,9 @@ function MeuFaturamentoPage() {
       setError("");
       try {
         const token = localStorage.getItem("token");
+        // CORREÇÃO: Usa 'api' e a URL relativa
         const response = await api.get(
-          `http://localhost:3001/profissionais/meu-relatorio-financeiro?mes=${selectedMonth}&ano=${selectedYear}`,
+          `/profissionais/meu-relatorio-financeiro?mes=${selectedMonth}&ano=${selectedYear}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -90,8 +91,8 @@ function MeuFaturamentoPage() {
     0
   );
 
-  const rows = relatorio.map((item) => (
-    <Table.Tr key={item.id}>
+  const rows = relatorio.map((item, index) => (
+    <Table.Tr key={index}>
       <Table.Td>
         {new Date(item.data_hora_inicio).toLocaleDateString("pt-BR")}
       </Table.Td>

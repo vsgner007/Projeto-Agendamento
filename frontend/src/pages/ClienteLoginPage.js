@@ -113,9 +113,6 @@ function ClienteLoginPage() {
           <Text ta="center" mt="md">
             Não tem uma conta? <Link to="/cliente/cadastro">Cadastre-se</Link>
           </Text>
-          <Text ta="center" mt="md">
-            <Link to="/login">Acesso Profissional</Link>
-          </Text>
         </form>
       </Paper>
     </Container>
