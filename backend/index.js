@@ -246,6 +246,7 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
       nome_cliente,
       telefone_cliente,
       email_cliente,
+      senha_cliente,
       data_hora_inicio,
     } = req.body;
 
@@ -266,12 +267,15 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
     const servicosInfoResult = await client.query(servicosInfoQuery, [
       servicos_ids,
     ]);
-    if (servicosInfoResult.rows.length !== servicos_ids.length) {
+    if (servicosInfoResult.rows.length !== servicos_ids.length)
       throw new Error("Um ou mais serviços não foram encontrados.");
-    }
 
     const duracao_total_minutos = servicosInfoResult.rows.reduce(
       (acc, s) => acc + s.duracao_minutos,
+      0
+    );
+    const preco_total = servicosInfoResult.rows.reduce(
+      (acc, s) => acc + parseFloat(s.preco),
       0
     );
     const dataInicio = new Date(data_hora_inicio);
@@ -279,49 +283,28 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
       dataInicio.getTime() + duracao_total_minutos * 60000
     );
 
-    // --- LÓGICA DE VERIFICAÇÃO DE CONFLITO ADICIONADA ---
-    const conflitoQuery = `
-            SELECT id FROM carrinho_agendamento
-            WHERE profissional_id = $1
-            AND (data_hora_inicio < $3 AND data_hora_fim > $2)
-            LIMIT 1;
-        `;
-    const conflitoResult = await client.query(conflitoQuery, [
-      profissionalId,
-      dataInicio,
-      dataFim,
-    ]);
-    if (conflitoResult.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message:
-          "Desculpe, este horário acabou de ser agendado. Por favor, escolha outro.",
-      });
-    }
-    // --- FIM DA VERIFICAÇÃO ---
-
-    const preco_total = servicosInfoResult.rows.reduce(
-      (acc, s) => acc + parseFloat(s.preco),
-      0
-    );
-
     let cliente;
     const clienteExistente = await client.query(
       "SELECT * FROM cliente WHERE email_contato = $1",
       [email_cliente]
     );
+
     if (clienteExistente.rows.length > 0) {
       cliente = clienteExistente.rows[0];
     } else {
+      if (!senha_cliente)
+        throw new Error("A senha é obrigatória para novos clientes.");
+      const salt = await bcrypt.genSalt(10);
+      const senhaHash = await bcrypt.hash(senha_cliente, salt);
       const novoCliente = await client.query(
-        "INSERT INTO cliente (nome_cliente, telefone_contato, email_contato) VALUES ($1, $2, $3) RETURNING *",
-        [nome_cliente, telefone_cliente, email_cliente]
+        "INSERT INTO cliente (nome_cliente, telefone_contato, email_contato, senha_hash) VALUES ($1, $2, $3, $4) RETURNING *",
+        [nome_cliente, telefone_cliente, email_cliente, senhaHash]
       );
       cliente = novoCliente.rows[0];
     }
 
     const carrinhoQuery = `INSERT INTO carrinho_agendamento (data_hora_inicio, data_hora_fim, preco_total, duracao_total_minutos, profissional_id, cliente_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
-    await client.query(carrinhoQuery, [
+    const carrinhoResult = await client.query(carrinhoQuery, [
       dataInicio.toISOString(),
       dataFim.toISOString(),
       preco_total,
@@ -329,6 +312,13 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
       profissionalId,
       cliente.id,
     ]);
+    const carrinho_id = carrinhoResult.rows[0].id;
+
+    // LÓGICA DE ASSOCIAÇÃO RESTAURADA E GARANTIDA
+    const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
+    for (const servico_id of servicos_ids) {
+      await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
+    }
 
     await client.query("COMMIT");
     res.status(201).json({ message: "Agendamento criado com sucesso." });
@@ -841,7 +831,6 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
         .json({ message: "Todos os campos são obrigatórios." });
     }
 
-    // Busca informações dos serviços para calcular duração e preço
     const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
     const servicosInfoResult = await client.query(servicosInfoQuery, [
       servicos_ids,
@@ -865,7 +854,6 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
       dataInicio.getTime() + duracao_total_minutos * 60000
     );
 
-    // Encontra ou cria o cliente
     let cliente;
     const clienteExistente = await client.query(
       "SELECT * FROM cliente WHERE email_contato = $1",
@@ -881,7 +869,6 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
       cliente = novoCliente.rows[0];
     }
 
-    // 1. Cria o registro principal do agendamento
     const carrinhoQuery = `INSERT INTO carrinho_agendamento (data_hora_inicio, data_hora_fim, preco_total, duracao_total_minutos, profissional_id, cliente_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
     const carrinhoResult = await client.query(carrinhoQuery, [
       dataInicio.toISOString(),
@@ -893,7 +880,7 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
     ]);
     const carrinho_id = carrinhoResult.rows[0].id;
 
-    // 2. LÓGICA RESTAURADA: Salva a associação entre o agendamento e os serviços
+    // LÓGICA DE ASSOCIAÇÃO RESTAURADA E GARANTIDA
     const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
     for (const servico_id of servicos_ids) {
       await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
