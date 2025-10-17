@@ -9,19 +9,22 @@ import {
   Alert,
   ActionIcon,
   Tooltip,
+  Text,
 } from "@mantine/core";
-import { IconTrash, IconPencil, IconLicense } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconListDetails } from "@tabler/icons-react";
 import AddFuncionarioModal from "../components/AddFuncionarioModal";
-import GerenciarServicosModal from "../components/GerenciarServicosModal";
 import EditFuncionarioModal from "../components/EditFuncionarioModal";
+import GerenciarServicosModal from "../components/GerenciarServicosModal";
+import useAuth from "../hooks/useAuth";
 
 function EquipePage() {
+  const { user } = useAuth();
   const [equipe, setEquipe] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [managingFuncionario, setManagingFuncionario] = useState(null);
   const [editingFuncionario, setEditingFuncionario] = useState(null);
+  const [managingServicos, setManagingServicos] = useState(null);
 
   const fetchEquipe = async () => {
     setLoading(true);
@@ -42,36 +45,32 @@ function EquipePage() {
     fetchEquipe();
   }, []);
 
-  const handleFuncionarioCreated = () => {
-    fetchEquipe(); // Busca a lista atualizada após criar um novo
+  const handleFuncionarioAdded = (novoFuncionario) => {
+    setEquipe((currentEquipe) => [...currentEquipe, novoFuncionario]);
   };
 
   const handleFuncionarioUpdated = (funcionarioAtualizado) => {
-    // Atualiza a lista na tela sem precisar buscar novamente na API
-    setEquipe(
-      equipe.map((m) =>
-        m.id === funcionarioAtualizado.id ? funcionarioAtualizado : m
+    setEquipe((currentEquipe) =>
+      currentEquipe.map((func) =>
+        func.id === funcionarioAtualizado.id ? funcionarioAtualizado : func
       )
     );
+    setEditingFuncionario(null); // Fecha o modal
   };
 
-  const handleDeleteFuncionario = async (funcionarioId) => {
+  const handleDeleteFuncionario = async (id) => {
     if (
-      !window.confirm(
-        "Atenção: deletar um profissional também removerá todos os seus agendamentos associados. Deseja continuar?"
-      )
+      !window.confirm("Tem certeza que deseja excluir este membro da equipe?")
     )
       return;
     try {
-      setError("");
       const token = localStorage.getItem("token");
-      await api.delete(`/profissionais/${funcionarioId}`, {
+      await api.delete(`/profissionais/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // Remove o funcionário da lista na tela instantaneamente
-      setEquipe(equipe.filter((m) => m.id !== funcionarioId));
+      setEquipe(equipe.filter((func) => func.id !== id));
     } catch (err) {
-      setError("Erro ao deletar funcionário.");
+      setError("Erro ao excluir membro da equipe.");
     }
   };
 
@@ -83,39 +82,45 @@ function EquipePage() {
       </Alert>
     );
 
-  const rows = equipe.map((membro) => (
-    <Table.Tr key={membro.id}>
-      <Table.Td>{membro.nome}</Table.Td>
-      <Table.Td>{membro.email}</Table.Td>
-      <Table.Td>{membro.role}</Table.Td>
+  const rows = equipe.map((func) => (
+    <Table.Tr key={func.id}>
+      <Table.Td>{func.nome}</Table.Td>
+      <Table.Td>{func.email}</Table.Td>
+      <Table.Td>{func.role}</Table.Td>
+      {/* Célula da Nova Coluna "Especialidade" */}
+      <Table.Td>{func.especialidade || "N/A"}</Table.Td>
       <Table.Td>
         <Group gap="sm">
-          <Tooltip label="Gerenciar Serviços">
+          {func.role === "funcionario" && (
+            <Tooltip label="Gerenciar Serviços">
+              <ActionIcon
+                variant="light"
+                onClick={() => setManagingServicos(func)}
+              >
+                <IconListDetails size={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          <Tooltip label="Editar Membro">
             <ActionIcon
               variant="light"
-              color="teal"
-              onClick={() => setManagingFuncionario(membro)}
-            >
-              <IconLicense size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Editar Funcionário">
-            <ActionIcon
-              variant="light"
-              onClick={() => setEditingFuncionario(membro)}
+              color="blue"
+              onClick={() => setEditingFuncionario(func)}
             >
               <IconPencil size={16} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Deletar Funcionário">
-            <ActionIcon
-              variant="light"
-              color="red"
-              onClick={() => handleDeleteFuncionario(membro.id)}
-            >
-              <IconTrash size={16} />
-            </ActionIcon>
-          </Tooltip>
+          {func.id !== user.id && (
+            <Tooltip label="Excluir Membro">
+              <ActionIcon
+                variant="light"
+                color="red"
+                onClick={() => handleDeleteFuncionario(func.id)}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
         </Group>
       </Table.Td>
     </Table.Tr>
@@ -126,17 +131,19 @@ function EquipePage() {
       <Group justify="space-between" mb="lg">
         <Title order={2}>Gestão de Equipe</Title>
         <Button onClick={() => setIsAddModalOpen(true)}>
-          Adicionar Funcionário
+          Adicionar Membro
         </Button>
       </Group>
 
-      <Table.ScrollContainer minWidth={600}>
-        <Table striped withTableBorder highlightOnHover>
+      <Table.ScrollContainer minWidth={800}>
+        <Table striped withTableBorder withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Nome</Table.Th>
               <Table.Th>Email</Table.Th>
               <Table.Th>Papel</Table.Th>
+              {/* Cabeçalho da Nova Coluna "Especialidade" */}
+              <Table.Th>Especialidade</Table.Th>
               <Table.Th>Ações</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -145,8 +152,8 @@ function EquipePage() {
               rows
             ) : (
               <Table.Tr>
-                <Table.Td colSpan={4} align="center">
-                  Nenhum funcionário cadastrado.
+                <Table.Td colSpan={5} align="center">
+                  <Text>Nenhum membro na equipe ainda.</Text>
                 </Table.Td>
               </Table.Tr>
             )}
@@ -157,18 +164,16 @@ function EquipePage() {
       <AddFuncionarioModal
         opened={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onFuncionarioCreated={handleFuncionarioCreated}
+        onFuncionarioAdded={handleFuncionarioAdded}
       />
-
-      <GerenciarServicosModal
-        funcionario={managingFuncionario}
-        onClose={() => setManagingFuncionario(null)}
-      />
-
       <EditFuncionarioModal
         funcionario={editingFuncionario}
         onClose={() => setEditingFuncionario(null)}
         onFuncionarioUpdated={handleFuncionarioUpdated}
+      />
+      <GerenciarServicosModal
+        funcionario={managingServicos}
+        onClose={() => setManagingServicos(null)}
       />
     </div>
   );

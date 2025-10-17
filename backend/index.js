@@ -433,8 +433,11 @@ app.get(
           .status(400)
           .json({ message: "Usuário não está associado a uma filial." });
       const filial_id = filialResult.rows[0].filial_id;
-      const queryText = `SELECT id, nome, email, role FROM profissional WHERE filial_id = $1 ORDER BY nome;`;
+
+      // 3. Adiciona 'especialidade' ao SELECT
+      const queryText = `SELECT id, nome, email, role, especialidade FROM profissional WHERE filial_id = $1 ORDER BY nome;`;
       const result = await db.query(queryText, [filial_id]);
+
       res.status(200).json(result.rows);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -449,18 +452,24 @@ app.put(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.params;
-      const { nome, email, role } = req.body;
+      // 4. Recebe 'especialidade' para atualização
+      const { nome, email, role, especialidade } = req.body;
+
       if (!nome || !email || !role)
         return res
           .status(400)
           .json({ message: "Nome, email e papel são obrigatórios." });
-      const queryText = `UPDATE profissional SET nome = $1, email = $2, role = $3 WHERE id = $4 RETURNING id, nome, email, role;`;
+
+      // 5. Adiciona 'especialidade' ao UPDATE
+      const queryText = `UPDATE profissional SET nome = $1, email = $2, role = $3, especialidade = $4 WHERE id = $5 RETURNING id, nome, email, role, especialidade;`;
       const result = await db.query(queryText, [
         nome,
         email,
         role,
+        especialidade,
         profissional_id,
       ]);
+
       if (result.rowCount === 0)
         return res
           .status(404)
@@ -513,48 +522,56 @@ app.get(
   }
 );
 
-// app.post(
-//   "/profissionais",
-//   authMiddleware,
-//   checkRole(["dono"]),
-//   checkPlan(["equipe", "premium"]),
-//   async (req, res) => {
-//     try {
-//       const donoId = req.profissional.id;
-//       const { nome, email, senha, role } = req.body;
-//       if (!nome || !email || !senha || !role)
-//         return res.status(400).json({
-//           message: "Nome, email, senha e papel (role) são obrigatórios.",
-//         });
-//       const filialResult = await db.query(
-//         "SELECT filial_id FROM profissional WHERE id = $1",
-//         [donoId]
-//       );
-//       if (!filialResult.rows[0]?.filial_id)
-//         return res.status(400).json({
-//           message: "Administrador não está associado a uma filial válida.",
-//         });
-//       const filial_id = filialResult.rows[0].filial_id;
-//       const salt = await bcrypt.genSalt(10);
-//       const senhaHash = await bcrypt.hash(senha, salt);
-//       const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, nome, email, role;`;
-//       const result = await db.query(queryText, [
-//         nome,
-//         email,
-//         senhaHash,
-//         role,
-//         filial_id,
-//       ]);
-//       res.status(201).json(result.rows[0]);
-//     } catch (error) {
-//       if (error.code === "23505")
-//         return res
-//           .status(409)
-//           .json({ message: "Este email já está cadastrado." });
-//       res.status(500).json({ message: "Erro interno do servidor." });
-//     }
-//   }
-// );
+app.post(
+  "/profissionais",
+  authMiddleware,
+  checkRole(["dono"]),
+  checkPlan(["equipe", "premium"]),
+  async (req, res) => {
+    try {
+      const donoId = req.profissional.id;
+      // 1. Recebe a nova 'especialidade'
+      const { nome, email, senha, role, especialidade } = req.body;
+
+      if (!nome || !email || !senha || !role)
+        return res.status(400).json({
+          message: "Nome, email, senha e papel (role) são obrigatórios.",
+        });
+
+      const filialResult = await db.query(
+        "SELECT filial_id FROM profissional WHERE id = $1",
+        [donoId]
+      );
+      if (!filialResult.rows[0]?.filial_id)
+        return res.status(400).json({
+          message: "Administrador não está associado a uma filial válida.",
+        });
+      const filial_id = filialResult.rows[0].filial_id;
+
+      const salt = await bcrypt.genSalt(10);
+      const senhaHash = await bcrypt.hash(senha, salt);
+
+      // 2. Adiciona 'especialidade' ao INSERT
+      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id, especialidade) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role, especialidade;`;
+      const result = await db.query(queryText, [
+        nome,
+        email,
+        senhaHash,
+        role,
+        filial_id,
+        especialidade,
+      ]);
+
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      if (error.code === "23505")
+        return res
+          .status(409)
+          .json({ message: "Este email já está cadastrado." });
+      res.status(500).json({ message: "Erro interno do servidor." });
+    }
+  }
+);
 
 app.post(
   "/profissionais/:id/servicos",
@@ -1342,11 +1359,9 @@ app.put(
       ]);
 
       if (permissaoResult.rows.length === 0) {
-        return res
-          .status(403)
-          .json({
-            message: "Você não tem permissão para editar este cliente.",
-          });
+        return res.status(403).json({
+          message: "Você não tem permissão para editar este cliente.",
+        });
       }
 
       // --- CORREÇÃO APLICADA AQUI ---

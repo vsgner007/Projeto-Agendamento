@@ -3,41 +3,54 @@ import api from "../api";
 import {
   Modal,
   Button,
-  Group,
-  Select,
   TextInput,
   PasswordInput,
+  Select,
   Stack,
   Alert,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
 
-const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
+const AddFuncionarioModal = ({ opened, onClose, onFuncionarioAdded }) => {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [role, setRole] = useState("funcionario");
+  const [especialidade, setEspecialidade] = useState(""); // Novo estado
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async () => {
-    setError("");
     setLoading(true);
+    setError("");
     try {
       const token = localStorage.getItem("token");
-      await api.post(
+      const response = await api.post(
         "/profissionais",
-        { nome, email, senha, role },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          nome,
+          email,
+          senha,
+          role,
+          especialidade, // Envia a nova informação
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
-      onFuncionarioCreated();
-      onClose();
+
+      onFuncionarioAdded(response.data);
+      onClose(); // Fecha o modal
+      // Limpa os campos
+      setNome("");
+      setEmail("");
+      setSenha("");
+      setRole("funcionario");
+      setEspecialidade("");
     } catch (err) {
-      if (err.response && err.response.status === 409) {
-        setError("Este email já está em uso.");
-      } else {
-        setError("Não foi possível criar o funcionário.");
-      }
+      setError(
+        err.response?.data?.message ||
+          "Não foi possível adicionar o funcionário."
+      );
     } finally {
       setLoading(false);
     }
@@ -64,38 +77,43 @@ const AddFuncionarioModal = ({ opened, onClose, onFuncionarioCreated }) => {
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
           required
+          type="email"
+        />
+
+        {/* Novo campo de Especialidade */}
+        <TextInput
+          label="Especialidade / Cargo"
+          placeholder="Ex: Barbeiro, Manicure, Esteticista"
+          value={especialidade}
+          onChange={(e) => setEspecialidade(e.currentTarget.value)}
+        />
+
+        <Select
+          label="Papel no Sistema"
+          value={role}
+          onChange={setRole}
+          data={[
+            {
+              value: "funcionario",
+              label: "Funcionário (Barbeiro, Manicure, etc.)",
+            },
+            { value: "recepcionista", label: "Recepcionista" },
+          ]}
+          required
         />
         <PasswordInput
           label="Senha Provisória"
-          placeholder="Uma senha para o primeiro acesso"
+          placeholder="Senha de acesso"
           value={senha}
           onChange={(e) => setSenha(e.currentTarget.value)}
           required
         />
-        <Select
-          label="Papel (Permissão)"
-          data={[
-            { value: "funcionario", label: "Funcionário (Barbeiro)" },
-            { value: "recepcionista", label: "Recepcionista" },
-            { value: "dono", label: "Dono (Acesso total)" },
-          ]}
-          value={role}
-          onChange={setRole}
-          required
-        />
-        {error && (
-          <Alert icon={<IconAlertCircle size={16} />} color="red" title="Erro">
-            {error}
-          </Alert>
-        )}
-        <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} loading={loading}>
-            Adicionar Membro
-          </Button>
-        </Group>
+
+        {error && <Alert color="red">{error}</Alert>}
+
+        <Button onClick={handleSubmit} loading={loading}>
+          Adicionar Membro
+        </Button>
       </Stack>
     </Modal>
   );
