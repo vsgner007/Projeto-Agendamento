@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import api from "../api"; // CORREÇÃO: Usa a instância centralizada da API
+import api from "../api";
 import {
   Container,
   Title,
@@ -13,6 +13,8 @@ import {
   TextInput,
   Checkbox,
   Stack,
+  PasswordInput,
+  Anchor,
 } from "@mantine/core";
 import {
   IconUser,
@@ -21,8 +23,10 @@ import {
   IconCheck,
 } from "@tabler/icons-react";
 import HorarioModal from "./HorarioModal";
+import ClienteLoginModal from "./ClienteLoginModal";
 import { jwtDecode } from "jwt-decode";
 
+// Componente interno reutilizável para as caixas de seleção
 const SelectionBox = ({
   icon,
   title,
@@ -52,13 +56,20 @@ const SelectionBox = ({
 );
 
 const BookingFlow = ({ onBookingSuccess }) => {
+  // Estados para os dados da filial e profissionais/serviços
   const [filial, setFilial] = useState(null);
   const [profissionais, setProfissionais] = useState([]);
   const [servicos, setServicos] = useState([]);
+
+  // Estados para as seleções do usuário
   const [selectedProfissional, setSelectedProfissional] = useState(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
+
+  // Estados de UI e formulário final
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState({
     filial: true,
     profissionais: false,
@@ -67,10 +78,14 @@ const BookingFlow = ({ onBookingSuccess }) => {
   });
   const [error, setError] = useState("");
   const [bookingSuccess, setBookingSuccess] = useState(false);
+
+  // Estados dos campos do formulário
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
+  const [senhaCliente, setSenhaCliente] = useState("");
 
+  // 1. Lógica de Subdomínio para carregar a filial automaticamente
   useEffect(() => {
     const hostnameParts = window.location.hostname.split(".");
     const subdomain =
@@ -92,6 +107,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
       });
   }, []);
 
+  // 2. Busca profissionais automaticamente quando a filial é carregada
   useEffect(() => {
     if (filial) {
       setLoading((prev) => ({ ...prev, profissionais: true }));
@@ -105,6 +121,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [filial]);
 
+  // 3. Busca serviços quando um profissional é selecionado
   useEffect(() => {
     if (selectedProfissional) {
       setLoading((prev) => ({ ...prev, servicos: true }));
@@ -118,6 +135,7 @@ const BookingFlow = ({ onBookingSuccess }) => {
     }
   }, [selectedProfissional]);
 
+  // 4. Verifica se há um cliente logado ao carregar e pré-preenche os dados
   useEffect(() => {
     const token = localStorage.getItem("clienteToken");
     if (token) {
@@ -126,8 +144,9 @@ const BookingFlow = ({ onBookingSuccess }) => {
         setNomeCliente(decoded.nome || "");
         setEmailCliente(decoded.email || "");
         setTelefoneCliente(decoded.telefone || "");
+        setIsLoggedIn(true);
       } catch (e) {
-        console.error("Token de cliente inválido", e);
+        localStorage.removeItem("clienteToken"); // Limpa token inválido
       }
     }
   }, []);
@@ -160,16 +179,28 @@ const BookingFlow = ({ onBookingSuccess }) => {
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
           email_cliente: emailCliente,
+          senha_cliente: senhaCliente, // Envia a senha se for um novo cliente
           data_hora_inicio: selectedSlot.toISOString(),
         }
       );
       setBookingSuccess(true);
       if (onBookingSuccess) onBookingSuccess();
     } catch (err) {
-      setError("Ocorreu um erro ao confirmar seu agendamento.");
+      setError(
+        err.response?.data?.message ||
+          "Ocorreu um erro ao confirmar seu agendamento."
+      );
     } finally {
       setLoading((prev) => ({ ...prev, booking: false }));
     }
+  };
+
+  const handleLoginSuccess = (user) => {
+    setNomeCliente(user.nome || "");
+    setEmailCliente(user.email || "");
+    setTelefoneCliente(user.telefone || "");
+    setIsLoggedIn(true);
+    setIsLoginModalOpen(false);
   };
 
   const handleSlotSelected = useCallback((slot) => {
@@ -178,11 +209,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
   }, []);
 
   const duracaoTotal = selectedServices.reduce(
-    (acc, s) => acc + s.duracao_minutos,
+    (acc, s) => acc + (s.duracao_minutos || 0),
     0
   );
   const precoTotal = selectedServices.reduce(
-    (acc, s) => acc + parseFloat(s.preco),
+    (acc, s) => acc + parseFloat(s.preco || 0),
     0
   );
 
@@ -355,30 +386,55 @@ const BookingFlow = ({ onBookingSuccess }) => {
       {selectedSlot && (
         <Paper withBorder p="md" mt="md" radius="md">
           <Title order={4}>4. Confirme seus dados</Title>
+
+          {!isLoggedIn && (
+            <Text size="sm" c="dimmed" mb="md">
+              Já tem uma conta?{" "}
+              <Anchor
+                component="button"
+                type="button"
+                onClick={() => setIsLoginModalOpen(true)}
+              >
+                Faça o login
+              </Anchor>{" "}
+              para preencher seus dados.
+            </Text>
+          )}
+
           <form onSubmit={handleBookingSubmit}>
             <Stack mt="md">
               <TextInput
                 label="Seu Nome Completo"
-                placeholder="Nome Sobrenome"
                 value={nomeCliente}
                 onChange={(e) => setNomeCliente(e.currentTarget.value)}
                 required
+                readOnly={isLoggedIn}
               />
               <TextInput
                 label="Seu Email"
-                placeholder="email@exemplo.com"
                 value={emailCliente}
                 onChange={(e) => setEmailCliente(e.currentTarget.value)}
                 required
                 type="email"
+                readOnly={isLoggedIn}
               />
               <TextInput
                 label="Seu Telefone (WhatsApp)"
-                placeholder="(XX) XXXXX-XXXX"
                 value={telefoneCliente}
                 onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
                 required
               />
+
+              {!isLoggedIn && (
+                <PasswordInput
+                  label="Crie uma Senha"
+                  description="Para acessar seus agendamentos no futuro."
+                  value={senhaCliente}
+                  onChange={(e) => setSenhaCliente(e.currentTarget.value)}
+                  required
+                />
+              )}
+
               <Button fullWidth mt="md" type="submit" loading={loading.booking}>
                 Confirmar Agendamento
               </Button>
@@ -393,6 +449,11 @@ const BookingFlow = ({ onBookingSuccess }) => {
         onSelectSlot={handleSlotSelected}
         profissionalId={selectedProfissional?.id}
         service={{ duracao_minutos: duracaoTotal }}
+      />
+      <ClienteLoginModal
+        opened={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
       />
     </Container>
   );
