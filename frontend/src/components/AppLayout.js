@@ -23,7 +23,7 @@ import useAuth from "../hooks/useAuth";
 const AppLayout = () => {
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
-  const { user } = useAuth(); // Pega o usuário, que agora tem 'plano'
+  const { user } = useAuth();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -84,7 +84,16 @@ const AppLayout = () => {
 
     // Links visíveis para o dono em qualquer plano
     navLinks.push(
-      { icon: <IconCrown size="1rem" />, label: "Assinatura", path: "/planos" },
+      // --- CORREÇÃO APLICADA AQUI ---
+      // 'component="a"' e 'href="/"' fazem dele um link externo para a Landing Page
+      // 'target="_blank"' faz abrir em uma nova aba
+      {
+        icon: <IconCrown size="1rem" />,
+        label: "Assinatura",
+        path: "/",
+        component: "a",
+        target: "_blank",
+      },
       {
         icon: <IconSettings size="1rem" />,
         label: "Configurações",
@@ -107,7 +116,13 @@ const AppLayout = () => {
         <Group h="100%" px="md">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
           <Group gap="xs" align="center">
-            <Image src="/logoBooki192.png" h={30} w="auto" fit="contain" />
+            <Image
+              src="/logoBooki192.png"
+              h={30}
+              w="auto"
+              fit="contain"
+              alt="Logo Booki"
+            />
             <Title order={3}>Painel do Profissional</Title>
           </Group>
         </Group>
@@ -121,9 +136,12 @@ const AppLayout = () => {
                 key={link.label}
                 label={link.label}
                 leftSection={link.icon}
-                component={RouterNavLink}
+                // Lógica de roteamento
+                component={link.component || RouterNavLink}
                 to={link.path}
-                onClick={toggle}
+                href={link.path} // Necessário para o link 'a'
+                target={link.target} // Necessário para o link 'a'
+                onClick={link.component ? undefined : toggle} // Só fecha o menu se for um link interno
               />
             ))}
         </AppShell.Section>
