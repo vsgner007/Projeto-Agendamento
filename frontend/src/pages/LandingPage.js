@@ -14,9 +14,8 @@ import {
   Drawer,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconCheck } from "@tabler/icons-react";
-import { Link } from "react-router-dom";
 import { IconCheck, IconHelp } from "@tabler/icons-react";
+import { Link } from "react-router-dom";
 
 const planos = [
   {
