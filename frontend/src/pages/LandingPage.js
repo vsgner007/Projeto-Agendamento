@@ -75,7 +75,7 @@ function LandingPage() {
             {/* 2. Botão de Suporte Adicionado */}
             <Button
               component="a"
-              href="mailto:vsgner032@gmail.com"
+              href="mailto: vsgner032@gmail.com"
               variant="default"
               leftSection={<IconHelp size={16} />}
             >
