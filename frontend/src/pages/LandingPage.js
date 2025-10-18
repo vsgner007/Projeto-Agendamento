@@ -16,6 +16,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { IconCheck } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
+import { IconCheck, IconHelp } from "@tabler/icons-react";
 
 const planos = [
   {
@@ -71,6 +72,15 @@ function LandingPage() {
 
           {/* MENU DESKTOP */}
           <Group visibleFrom="sm">
+            {/* 2. Botão de Suporte Adicionado */}
+            <Button
+              component="a"
+              href="mailto:vsgner032@gmail.com"
+              variant="default"
+              leftSection={<IconHelp size={16} />}
+            >
+              Suporte
+            </Button>
             <Button component={Link} to="/login">
               Acesso Profissional
             </Button>
