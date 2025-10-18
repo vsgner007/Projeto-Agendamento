@@ -45,31 +45,6 @@ app.use(express.json());
 app.use(cors(corsOptions));
 
 // =================================================================
-// --- Middleware "Espião" de Planos (para depuração) ---
-// =================================================================
-const checkPlan = (planosPermitidos) => {
-  return (req, res, next) => {
-    const userPlan = req.profissional?.plano;
-
-    // Logs de depuração
-    console.log("\n--- VERIFICANDO PLANO DE ASSINATURA ---");
-    console.log("Plano do usuário (do token):", userPlan);
-    console.log("Planos permitidos para esta rota:", planosPermitidos);
-
-    if (userPlan && planosPermitidos.includes(userPlan)) {
-      console.log("Resultado da verificação: ACESSO PERMITIDO");
-      next(); // Permite o acesso
-    } else {
-      console.log("Resultado da verificação: ACESSO BLOQUEADO");
-      res.status(403).json({
-        message:
-          "Funcionalidade não disponível no seu plano. Considere fazer um upgrade.",
-      });
-    }
-  };
-};
-
-// =================================================================
 // --- NOVA SUPER-ROTA DE REGISTRO DE NEGÓCIO ---
 // =================================================================
 // dentro de backend/index.js
