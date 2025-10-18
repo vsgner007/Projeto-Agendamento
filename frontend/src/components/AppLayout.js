@@ -88,6 +88,7 @@ const AppLayout = () => {
     >
       <AppShell.Header>
         <Group gap="xs" align="center">
+          <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
           <Image src="/logoBooki192.png" h={30} w="auto" fit="contain" />
           <Title order={3}>Painel do Profissional</Title>
         </Group>
