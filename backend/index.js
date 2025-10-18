@@ -86,26 +86,33 @@ app.post("/registrar-negocio", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // 1. Cria um subdomínio a partir do nome da filial
-    const subdomain = nomeFilial
+    // --- CORREÇÕES APLICADAS AQUI ---
+    // 1. Normaliza (ã -> a) e limpa o nome da filial
+    const nomeBase = nomeFilial
       .toLowerCase()
+      .normalize("NFD") // Separa "ã" em "a" e "~"
+      .replace(/[\u0300-\u036f]/g, "") // Remove os acentos (o "~")
       .replace(/\s+/g, "-") // Substitui espaços por hífens
-      .replace(/[^a-z0-9-]/g, ""); // Remove caracteres especiais
+      .replace(/[^a-z0-9-]/g, ""); // Remove quaisquer outros caracteres especiais
 
-    // 2. Salva a filial com o plano pendente E o novo subdomínio
+    // 2. Adiciona o sufixo da marca
+    const subdomain = `${nomeBase}-booki-agendamentos`;
+    // --- FIM DAS CORREÇÕES ---
+
+    // 3. Salva a filial com o plano pendente E o novo subdomínio corrigido
     const filialQuery =
       "INSERT INTO filial (nome_filial, plano, subdomain) VALUES ($1, $2, $3) RETURNING id";
     const filialResult = await client.query(filialQuery, [
       nomeFilial,
       "pendente_pagamento",
-      subdomain,
+      subdomain, // Usa o novo subdomínio corrigido
     ]);
     const novaFilialId = filialResult.rows[0].id;
 
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaDono, salt);
 
-    // 3. Adiciona a coluna 'config_horarios' com um valor JSON padrão no INSERT
+    // 4. Adiciona 'config_horarios' padrão (código existente e correto)
     const donoQuery =
       "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role";
     const defaultConfig = {
