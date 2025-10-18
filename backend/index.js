@@ -6,14 +6,15 @@ const cors = require("cors");
 const authMiddleware = require("./middleware/auth");
 const checkRole = require("./middleware/checkRole");
 const authClienteMiddleware = require("./middleware/authCliente");
-const authFuncionarioMiddleware = require("./middleware/authFuncionario"); // Novo
-const cron = require("node-cron"); // Importa o agendador
-const { enviarLembreteWhatsApp } = require("./whatsapp"); // Importa nosso módulo de WhatsApp
+const authFuncionarioMiddleware = require("./middleware/authFuncionario");
+const cron = require("node-cron");
+const { enviarLembreteWhatsApp } = require("./whatsapp");
 const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
 const app = express();
 const port = 3001;
 const { MercadoPagoConfig, PreApproval } = require("mercadopago");
+const checkPlan = require("./middleware/checkPlan");
 
 const planos = {
   individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
@@ -342,25 +343,14 @@ app.post("/login", async (req, res) => {
       return res
         .status(400)
         .json({ message: "Email e senha são obrigatórios." });
-
-    // Query agora busca também o subdomain da filial
-    const queryText = `
-            SELECT p.*, f.plano, f.subdomain 
-            FROM profissional p 
-            LEFT JOIN filial f ON p.filial_id = f.id 
-            WHERE p.email = $1
-        `;
+    const queryText = `SELECT p.*, f.plano, f.subdomain FROM profissional p LEFT JOIN filial f ON p.filial_id = f.id WHERE p.email = $1`;
     const result = await db.query(queryText, [email]);
-
     if (result.rows.length === 0)
       return res.status(401).json({ message: "Credenciais inválidas." });
-
     const profissional = result.rows[0];
     const senhaCorreta = await bcrypt.compare(senha, profissional.senha_hash);
     if (!senhaCorreta)
       return res.status(401).json({ message: "Credenciais inválidas." });
-
-    // Adicionamos o 'subdomain' ao payload do token
     const payload = {
       id: profissional.id,
       nome: profissional.nome,
@@ -368,7 +358,6 @@ app.post("/login", async (req, res) => {
       plano: profissional.plano,
       subdomain: profissional.subdomain,
     };
-
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
@@ -387,25 +376,25 @@ app.post(
     try {
       const donoId = req.profissional.id;
       const { nome, email, senha, role, especialidade } = req.body;
-
       if (!nome || !email || !senha || !role)
-        return res.status(400).json({
-          message: "Nome, email, senha e papel (role) são obrigatórios.",
-        });
-
+        return res
+          .status(400)
+          .json({
+            message: "Nome, email, senha e papel (role) são obrigatórios.",
+          });
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [donoId]
       );
       if (!filialResult.rows[0]?.filial_id)
-        return res.status(400).json({
-          message: "Administrador não está associado a uma filial válida.",
-        });
+        return res
+          .status(400)
+          .json({
+            message: "Administrador não está associado a uma filial válida.",
+          });
       const filial_id = filialResult.rows[0].filial_id;
-
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
-
       const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id, especialidade) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role, especialidade;`;
       const result = await db.query(queryText, [
         nome,
@@ -415,7 +404,6 @@ app.post(
         filial_id,
         especialidade,
       ]);
-
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")

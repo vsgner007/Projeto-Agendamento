@@ -1,6 +1,7 @@
 // backend/middleware/checkPlan.js
 const checkPlan = (planosPermitidos) => {
   return (req, res, next) => {
+    // Pega o plano que foi colocado no token durante o login
     const userPlan = req.profissional?.plano;
 
     if (userPlan && planosPermitidos.includes(userPlan)) {
