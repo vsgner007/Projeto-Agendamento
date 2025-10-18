@@ -68,8 +68,10 @@ function LandingPage() {
           justify="space-between"
           style={{ height: "100%", padding: "0 16px" }}
         >
-          <Image src="/logoBooki192.png" width={30} height={30} />
-          <Title order={3}>Booki</Title>
+          <Group gap="xs" align="center">
+            <Image src="/logoBooki192.png" h={30} w="auto" fit="contain" />
+            <Title order={3}>Booki</Title>
+          </Group>
 
           {/* MENU DESKTOP */}
           <Group visibleFrom="sm">
