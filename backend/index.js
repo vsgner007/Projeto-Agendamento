@@ -374,27 +374,43 @@ app.post(
   checkPlan(["equipe", "premium"]),
   async (req, res) => {
     try {
-      const donoId = req.profissional.id;
+      const { id: donoId, plano } = req.profissional;
       const { nome, email, senha, role, especialidade } = req.body;
+
       if (!nome || !email || !senha || !role)
-        return res
-          .status(400)
-          .json({
-            message: "Nome, email, senha e papel (role) são obrigatórios.",
-          });
+        return res.status(400).json({
+          message: "Nome, email, senha e papel (role) são obrigatórios.",
+        });
+
       const filialResult = await db.query(
         "SELECT filial_id FROM profissional WHERE id = $1",
         [donoId]
       );
       if (!filialResult.rows[0]?.filial_id)
-        return res
-          .status(400)
-          .json({
-            message: "Administrador não está associado a uma filial válida.",
-          });
+        return res.status(400).json({
+          message: "Administrador não está associado a uma filial válida.",
+        });
       const filial_id = filialResult.rows[0].filial_id;
+
+      // --- LÓGICA DE LIMITE DE PLANO ---
+      if (plano === "equipe") {
+        const countQuery =
+          "SELECT COUNT(id) FROM profissional WHERE filial_id = $1 AND role = 'funcionario'";
+        const countResult = await db.query(countQuery, [filial_id]);
+        const totalFuncionarios = parseInt(countResult.rows[0].count, 10);
+        if (totalFuncionarios >= 3) {
+          return res.status(403).json({
+            message:
+              "Limite de 3 funcionários atingido para o Plano Equipe. Considere fazer um upgrade.",
+          });
+        }
+      }
+      // Se for 'premium', não há limite e o código continua
+      // --- FIM DA LÓGICA DE LIMITE ---
+
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
+
       const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id, especialidade) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role, especialidade;`;
       const result = await db.query(queryText, [
         nome,
@@ -404,6 +420,7 @@ app.post(
         filial_id,
         especialidade,
       ]);
+
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")
