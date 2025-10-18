@@ -89,11 +89,7 @@ const AppLayout = () => {
       <AppShell.Header>
         <Group h="100%" px="md">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-          <Image
-            src="frontend/public/logoBooki192.png"
-            width={30}
-            height={30}
-          />
+          <Image src="/logoBooki192.png" width={30} height={30} />
           <Title order={3}>Painel do Profissional</Title>
         </Group>
       </AppShell.Header>

@@ -68,11 +68,7 @@ function LandingPage() {
           justify="space-between"
           style={{ height: "100%", padding: "0 16px" }}
         >
-          <Image
-            src="frontend/public/logoBooki192.png"
-            width={30}
-            height={30}
-          />
+          <Image src="/logoBooki192.png" width={30} height={30} />
           <Title order={3}>Booki</Title>
 
           {/* MENU DESKTOP */}
