@@ -12,6 +12,7 @@ import {
   AppShell,
   Burger,
   Drawer,
+  Image,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconCheck, IconHelp } from "@tabler/icons-react";
@@ -67,6 +68,11 @@ function LandingPage() {
           justify="space-between"
           style={{ height: "100%", padding: "0 16px" }}
         >
+          <Image
+            src="frontend/public/logoBooki192.png"
+            width={30}
+            height={30}
+          />
           <Title order={3}>Booki</Title>
 
           {/* MENU DESKTOP */}

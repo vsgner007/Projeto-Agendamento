@@ -1,5 +1,5 @@
 import React from "react";
-import { AppShell, Title, NavLink, Burger, Group } from "@mantine/core";
+import { AppShell, Title, NavLink, Burger, Group, Image } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
   NavLink as RouterNavLink,
@@ -89,6 +89,11 @@ const AppLayout = () => {
       <AppShell.Header>
         <Group h="100%" px="md">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+          <Image
+            src="frontend/public/logoBooki192.png"
+            width={30}
+            height={30}
+          />
           <Title order={3}>Painel do Profissional</Title>
         </Group>
       </AppShell.Header>
