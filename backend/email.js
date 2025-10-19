@@ -68,4 +68,39 @@ async function enviarEmailReset(destinatario, link) {
   await sendEmail(destinatario, subject, html);
 }
 
+async function enviarEmailCobranca(destinatario, linkPagamento, nomePlano) {
+  const subject = `Sua fatura do plano ${nomePlano} está pronta!`;
+  const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+          <h2>Sua Fatura Chegou!</h2>
+          <p>Olá,</p>
+          <p>Este é um lembrete de que sua assinatura do <strong>Plano ${nomePlano}</strong> está prestes a vencer.</p>
+          <p>Para garantir que você não perca o acesso às suas ferramentas, por favor, realize o pagamento clicando no botão abaixo:</p>
+          <p style="margin: 20px 0;">
+              <a href="${linkPagamento}" target="_blank" style="padding: 12px 25px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 16px;">
+                  Pagar Agora com Mercado Pago
+              </a>
+          </p>
+          <p>Se você já realizou o pagamento, por favor, desconsidere este email.</p>
+      </div>
+  `;
+
+  // Chama a sua função de envio de email genérica (se você a criou) ou a lógica do sgMail
+  // Assumindo que você tem uma função genérica 'sendEmail':
+  // await sendEmail(destinatario, subject, html);
+
+  // Se não, adaptamos a lógica do sendgrid:
+  const sgMail = require("@sendgrid/mail");
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+
+  const msg = {
+    to: destinatario,
+    from: fromEmail,
+    subject: subject,
+    html: html,
+  };
+  await sgMail.send(msg);
+}
+
 module.exports = { enviarEmailReset, sendEmail }; // Exportamos ambas
