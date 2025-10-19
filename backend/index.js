@@ -325,21 +325,34 @@ app.post("/login", async (req, res) => {
       return res
         .status(400)
         .json({ message: "Email e senha são obrigatórios." });
-    const queryText = `SELECT p.*, f.plano, f.subdomain FROM profissional p LEFT JOIN filial f ON p.filial_id = f.id WHERE p.email = $1`;
+
+    // Busca o profissional e faz um JOIN para pegar todas as infos da filial
+    const queryText = `
+            SELECT p.*, f.plano, f.subdomain, f.assinatura_vence_em 
+            FROM profissional p 
+            LEFT JOIN filial f ON p.filial_id = f.id 
+            WHERE p.email = $1
+        `;
     const result = await db.query(queryText, [email]);
+
     if (result.rows.length === 0)
       return res.status(401).json({ message: "Credenciais inválidas." });
+
     const profissional = result.rows[0];
     const senhaCorreta = await bcrypt.compare(senha, profissional.senha_hash);
     if (!senhaCorreta)
       return res.status(401).json({ message: "Credenciais inválidas." });
+
+    // Adiciona 'assinatura_vence_em' ao payload do token
     const payload = {
       id: profissional.id,
       nome: profissional.nome,
       role: profissional.role,
       plano: profissional.plano,
       subdomain: profissional.subdomain,
+      assinatura_vence_em: profissional.assinatura_vence_em, // NOVO
     };
+
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
@@ -1648,79 +1661,38 @@ app.post(
   "/webhook/mercadopago",
   express.json({ type: "application/json" }),
   async (req, res) => {
-    console.log("--- NOTIFICAÇÃO DO MERCADO PAGO RECEBIDA ---");
-    console.log("Body:", req.body);
-
     try {
-      const notification = req.body;
+      // Agora ouvimos por 'payment' (pagamentos)
+      if (req.body.type === "payment") {
+        const paymentId = req.body.data.id;
 
-      // A notificação de uma nova assinatura bem-sucedida tem o tipo 'preapproval'
-      if (
-        notification &&
-        notification.type === "preapproval" &&
-        notification.data?.id
-      ) {
-        const preapprovalId = notification.data.id;
-        console.log(
-          `[WEBHOOK] Notificação para a pré-aprovação ID: ${preapprovalId}`
-        );
+        // Busca os detalhes do pagamento no Mercado Pago
+        const payment = await mercadopago.payment.findById(paymentId);
+        const payerEmail = payment.body.payer.email;
+        const status = payment.body.status;
 
-        // 1. Busca os detalhes da assinatura no Mercado Pago
-        const preapproval = new PreApproval(mpClient);
-        const subscriptionDetails = await preapproval.get({
-          id: preapprovalId,
-        });
-        console.log("[WEBHOOK] Detalhes da assinatura obtidos com sucesso.");
+        if (status === "approved") {
+          // Encontra a filial pelo email do dono
+          const filialQuery = `SELECT id FROM filial WHERE id = (SELECT filial_id FROM profissional WHERE email = $1 AND role = 'dono')`;
+          const filialResult = await db.query(filialQuery, [payerEmail]);
+          if (filialResult.rows.length === 0)
+            throw new Error(`Filial não encontrada para o email ${payerEmail}`);
 
-        const payerEmail = subscriptionDetails.payer_email;
-        const planId = subscriptionDetails.preapproval_plan_id;
-        const status = subscriptionDetails.status;
+          const filialId = filialResult.rows[0].id;
 
-        // 2. Garante que a assinatura foi autorizada
-        if (status === "authorized") {
+          // Atualiza a data de vencimento: 30 dias a partir de agora
+          await db.query(
+            `UPDATE filial SET assinatura_vence_em = NOW() + INTERVAL '30 days' WHERE id = $1`,
+            [filialId]
+          );
           console.log(
-            `[WEBHOOK] Assinatura autorizada para o email: ${payerEmail}`
+            `[WEBHOOK] Pagamento aprovado. Assinatura da filial ${filialId} estendida por 30 dias.`
           );
-
-          // 3. Encontra qual dos nossos planos corresponde ao ID do MP
-          const nomeDoPlano = Object.keys(planos).find(
-            (key) => planos[key] === planId
-          );
-          if (!nomeDoPlano) {
-            console.error(
-              `[WEBHOOK] ERRO: ID de plano ${planId} não encontrado em nosso mapeamento.`
-            );
-            return res.status(200).send("OK"); // Responde OK para não receber a notificação de novo
-          }
-          console.log(`[WEBHOOK] Plano assinado: ${nomeDoPlano}`);
-
-          // 4. Encontra o usuário 'dono' pelo email e atualiza o plano da sua filial
-          const updateUserPlanQuery = `
-                    UPDATE filial SET plano = $1
-                    WHERE id = (SELECT filial_id FROM profissional WHERE email = $2 AND role = 'dono');
-                `;
-          const updateResult = await db.query(updateUserPlanQuery, [
-            nomeDoPlano,
-            payerEmail,
-          ]);
-
-          if (updateResult.rowCount > 0) {
-            console.log(
-              `[WEBHOOK] SUCESSO: Plano do usuário ${payerEmail} atualizado para '${nomeDoPlano}' no banco de dados.`
-            );
-          } else {
-            console.error(
-              `[WEBHOOK] FALHA: Nenhum usuário 'dono' com o email ${payerEmail} foi encontrado para atualizar o plano.`
-            );
-          }
         }
       }
-      // Responde ao Mercado Pago que a notificação foi recebida com sucesso
       res.status(200).send("OK");
     } catch (error) {
-      console.error("[WEBHOOK] Erro ao processar notificação:", error);
-      // Mesmo em caso de erro, respondemos 200 para o MP não ficar reenviando. O erro fica logado para nós.
-      res.status(200).send("Erro interno ao processar");
+      console.error("ERRO AO PROCESSAR WEBHOOK DO MERCADO PAGO:", error);
     }
   }
 );
@@ -1758,6 +1730,63 @@ cron.schedule("0 3 * * *", async () => {
     }
   } catch (error) {
     console.error("🤖 Erro ao executar o robô de limpeza:", error);
+  }
+});
+
+// Este robô roda todo dia às 8h da manhã
+cron.schedule("0 8 * * *", async () => {
+  console.log("🤖 Robô Cobrador: Iniciando verificação de vencimentos...");
+  try {
+    // 1. Busca filiais que vencem em 3 dias (para dar tempo de pagar boleto/pix)
+    const filiaisParaCobrar = await db.query(
+      `SELECT f.id, f.plano, p.email 
+             FROM filial f 
+             JOIN profissional p ON f.id = p.filial_id
+             WHERE p.role = 'dono' AND f.assinatura_vence_em BETWEEN NOW() AND NOW() + INTERVAL '3 days'`
+    );
+
+    if (filiaisParaCobrar.rows.length === 0) {
+      console.log("🤖 Robô Cobrador: Nenhuma assinatura vencendo hoje.");
+      return;
+    }
+
+    for (const filial of filiaisParaCobrar.rows) {
+      // 2. Define o valor a cobrar com base no plano
+      let valor;
+      if (filial.plano === "individual") valor = 29.9;
+      else if (filial.plano === "equipe") valor = 79.9;
+      else if (filial.plano === "premium") valor = 129.9;
+      else continue; // Pula se o plano for 'pendente'
+
+      // 3. Cria um Pagamento ÚNICO no Mercado Pago
+      const preference = {
+        items: [
+          {
+            title: `Mensalidade Plano ${filial.plano} - Look Time`,
+            quantity: 1,
+            currency_id: "BRL",
+            unit_price: valor,
+          },
+        ],
+        payer: { email: filial.email },
+        back_urls: { success: `https://booki-agendamentos.vercel.app/` },
+      };
+
+      const response = await mercadopago.preferences.create(preference);
+      const linkPagamento = response.body.init_point; // Link de checkout
+
+      // 4. Envia o link de cobrança por email
+      await enviarEmailReset(
+        filial.email,
+        linkPagamento,
+        "Sua fatura do Look Time chegou!"
+      );
+      console.log(
+        `🤖 Robô Cobrador: Email de cobrança enviado para ${filial.email}.`
+      );
+    }
+  } catch (error) {
+    console.error("🤖 Robô Cobrador: Erro ao gerar cobranças:", error);
   }
 });
 // dbdd6d20e2f447c68a6a4b58c8262ce3
