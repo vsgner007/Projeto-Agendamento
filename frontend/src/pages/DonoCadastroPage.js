@@ -21,12 +21,9 @@ import { IconAlertCircle } from "@tabler/icons-react";
 // Mapeamento dos links estáticos de checkout do Mercado Pago
 // IMPORTANTE: Cole aqui os links corretos dos seus planos
 const linksDosPlanos = {
-  individual:
-    "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=dbdd6d20e2f447c68a6a4b58c8262ce3",
-  equipe:
-    "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=7bd36f48c3c54a2ca25d46b6e635f551",
-  premium:
-    "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=75d0d3c4fec54bc8a48b91311c4def1b",
+  individual: "https://go.hotmart.com/B102516426Y?off=fiit6bbd",
+  equipe: "https://go.hotmart.com/B102516426Y?off=ybntddyn",
+  premium: "https://go.hotmart.com/B102516426Y?off=6lphtre7",
 };
 
 function DonoCadastroPage() {

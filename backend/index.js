@@ -41,6 +41,96 @@ const corsOptions = {
   },
 };
 
+const planosHotmart = {
+  fiit6bbd: "individual",
+  ybntddyn: "equipe",
+  "6lphtre7": "premium",
+};
+
+// =ISTO:
+app.post(
+  "/webhook/hotmart",
+  express.json({ type: "application/json" }),
+  async (req, res) => {
+    console.log("--- NOTIFICAÇÃO DA HOTMART RECEBIDA ---");
+
+    // 1. Verificação de segurança (Opcional, mas recomendado)
+    const hottok = req.headers["hotmart_hottok"];
+    if (hottok !== process.env.HOTMART_HOTTOK) {
+      console.warn("[WEBHOOK] Assinatura Hottok inválida recebida.");
+      return res.status(401).send("Assinatura inválida.");
+    }
+
+    try {
+      const { event, data } = req.body;
+      const payerEmail = data?.buyer?.email;
+      const productId = data?.product?.id.toString(); // Converte para string para garantir
+      const status = data?.purchase?.status || data?.subscription?.status;
+
+      if (!event || !payerEmail || !productId) {
+        return res.status(400).send("Dados insuficientes na notificação.");
+      }
+
+      // 2. Mapeia o ID do produto da Hotmart para o nome do nosso plano
+      const nomeDoPlano = planosHotmart[productId];
+      if (!nomeDoPlano) {
+        console.error(
+          `[WEBHOOK] ERRO: ID de produto ${productId} não reconhecido.`
+        );
+        return res.status(200).send("OK (Produto não mapeado)");
+      }
+
+      // 3. Atualiza o banco de dados com base no evento
+      let novoStatusPlano = null;
+      let novaDataVencimento = null;
+
+      if (event === "PURCHASE_APPROVED" || status === "ACTIVE") {
+        novoStatusPlano = nomeDoPlano;
+        // Define a data de vencimento (Hotmart envia 'date_next_charge', mas +30 dias é mais simples)
+        novaDataVencimento = new Date();
+        novaDataVencimento.setDate(novaDataVencimento.getDate() + 30);
+      } else if (
+        event === "SUBSCRIPTION_CANCELED" ||
+        status === "CANCELED" ||
+        status === "REFUSED"
+      ) {
+        novoStatusPlano = "pendente_pagamento"; // Reverte para pendente
+        novaDataVencimento = new Date(); // Vencimento imediato
+      }
+
+      if (novoStatusPlano && novaDataVencimento) {
+        const updateUserPlanQuery = `
+                UPDATE filial SET plano = $1, assinatura_vence_em = $2
+                WHERE id = (SELECT filial_id FROM profissional WHERE email = $3 AND role = 'dono');
+            `;
+        const updateResult = await db.query(updateUserPlanQuery, [
+          novoStatusPlano,
+          novaDataVencimento.toISOString(),
+          payerEmail,
+        ]);
+
+        if (updateResult.rowCount > 0) {
+          console.log(
+            `[WEBHOOK] SUCESSO: Usuário ${payerEmail} atualizado para '${novoStatusPlano}'.`
+          );
+        } else {
+          console.error(
+            `[WEBHOOK] FALHA: Nenhum usuário 'dono' com o email ${payerEmail} foi encontrado.`
+          );
+        }
+      }
+
+      res.status(200).send("OK");
+    } catch (error) {
+      console.error(
+        "[WEBHOOK] Erro ao processar notificação da Hotmart:",
+        error
+      );
+      res.status(200).send("Erro interno ao processar");
+    }
+  }
+);
+
 app.use(express.json());
 app.use(cors(corsOptions));
 
@@ -1601,139 +1691,7 @@ try {
   console.error("ERRO CRÍTICO AO CONFIGURAR O MERCADO PAGO:", e);
 }
 
-// =================================================================
-// --- ROTA DE CHECKOUT DE ASSINATURA (COM DEPURAÇÃO) ---
-// =================================================================
-app.post("/criar-preferencia-assinatura", authMiddleware, async (req, res) => {
-  try {
-    console.log("1. Rota /criar-preferencia-assinatura iniciada.");
-    const { planoId } = req.body;
-    const { email } = req.profissional;
-    console.log(`2. Plano recebido: ${planoId}, Email do pagador: ${email}`);
-
-    const planos = {
-      individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
-      equipe: "7bd36f48c3c54a2ca25d46b6e635f551",
-      premium: "75d0d3c4fec54bc8a48b91311c4def1b",
-    };
-    const preapproval_plan_id = planos[planoId];
-
-    if (!preapproval_plan_id) {
-      console.log("ERRO: ID de plano inválido.");
-      return res.status(400).json({ message: "ID de plano inválido." });
-    }
-    console.log(
-      `3. Usando o ID do plano do Mercado Pago: ${preapproval_plan_id}`
-    );
-
-    const requestBody = {
-      preapproval_plan_id: preapproval_plan_id,
-      reason: `Assinatura do plano ${planoId}`,
-      payer_email: email,
-      back_urls: {
-        success: `http://localhost:3000/assinatura/sucesso`,
-      },
-    };
-
-    console.log("4. Criando instância de PreApproval...");
-    const preapproval = new PreApproval(mpClient);
-
-    console.log("5. Enviando requisição para a API do Mercado Pago...");
-    const response = await preapproval.create({ body: requestBody });
-
-    console.log(
-      "6. Resposta recebida do Mercado Pago com sucesso. Link:",
-      response.init_point
-    );
-    res.json({ init_point: response.init_point });
-  } catch (error) {
-    console.error(
-      "ERRO DETALHADO AO CRIAR PREFERÊNCIA:",
-      error?.cause || error
-    );
-    res.status(500).json({ message: "Falha ao criar link de pagamento." });
-  }
-});
-
-// ROTA WEBHOOK para receber notificações do Mercado Pago
-
-// --- Mapeamento de Planos e Preços ---
-// (Mova isso para o topo para ser usado pelo Robô e pelo Webhook)
-const planosPrecos = {
-  individual: { preco: 29.9 },
-  equipe: { preco: 79.9 },
-  premium: { preco: 129.9 },
-};
-
 // --- WEBHOOK (ATUALIZADO) ---
-app.post(
-  "/webhook/mercadopago",
-  express.json({ type: "application/json" }),
-  async (req, res) => {
-    try {
-      const notification = req.body;
-
-      // Agora ouvimos por 'payment' (pagamentos)
-      if (
-        notification &&
-        notification.type === "payment" &&
-        notification.data?.id
-      ) {
-        const paymentId = notification.data.id;
-        console.log(
-          `[WEBHOOK] Notificação de pagamento recebida: ${paymentId}`
-        );
-
-        const payment = new Payment(mpClient);
-        const paymentDetails = await payment.get({ id: paymentId });
-
-        const payerEmail = paymentDetails.payer.email;
-        const status = paymentDetails.status;
-
-        if (status === "approved") {
-          console.log(
-            `[WEBHOOK] Pagamento aprovado para o email: ${payerEmail}`
-          );
-
-          // Encontra a filial pelo email do dono
-          const filialQuery = `SELECT id, assinatura_vence_em FROM filial WHERE id = (SELECT filial_id FROM profissional WHERE email = $1 AND role = 'dono')`;
-          const filialResult = await db.query(filialQuery, [payerEmail]);
-
-          if (filialResult.rows.length === 0) {
-            throw new Error(
-              `[WEBHOOK] Filial não encontrada para o email ${payerEmail}`
-            );
-          }
-
-          const filialId = filialResult.rows[0].id;
-          const vencimentoAtual = filialResult.rows[0].assinatura_vence_em;
-
-          // Define a base para a nova data de vencimento
-          const baseData =
-            vencimentoAtual && new Date(vencimentoAtual) > new Date()
-              ? new Date(vencimentoAtual)
-              : new Date();
-
-          // Adiciona 30 dias à data base
-          baseData.setDate(baseData.getDate() + 30);
-          const novaDataVencimento = baseData.toISOString();
-
-          await db.query(
-            `UPDATE filial SET assinatura_vence_em = $1 WHERE id = $2`,
-            [novaDataVencimento, filialId]
-          );
-          console.log(
-            `[WEBHOOK] SUCESSO: Assinatura da filial ${filialId} estendida até ${novaDataVencimento}.`
-          );
-        }
-      }
-      res.status(200).send("OK");
-    } catch (error) {
-      console.error("[WEBHOOK] Erro ao processar notificação:", error);
-      res.status(200).send("Erro interno ao processar");
-    }
-  }
-);
 
 // 2. NOVO: Robô de Limpeza de Contas Pendentes
 console.log("Agendando robô de limpeza de contas pendentes...");
@@ -1770,78 +1728,6 @@ cron.schedule("0 3 * * *", async () => {
     console.error("🤖 Erro ao executar o robô de limpeza:", error);
   }
 });
-
-// NOVO: Robô Cobrador
-console.log("Agendando robô de cobranças...");
-// Roda todo dia às 8 da manhã
-cron.schedule("0 8 * * *", async () => {
-  console.log(
-    `[${new Date().toLocaleString(
-      "pt-BR"
-    )}] 🤖 Robô Cobrador: Iniciando verificação de vencimentos...`
-  );
-  try {
-    // Busca filiais que vencem nos próximos 3 dias (e que não sejam 'pendente_pagamento')
-    const filiaisParaCobrarQuery = `
-            SELECT p.email, f.plano
-            FROM filial f
-            JOIN profissional p ON f.id = p.filial_id
-            WHERE p.role = 'dono' 
-              AND f.plano != 'pendente_pagamento'
-              AND f.assinatura_vence_em BETWEEN NOW() AND NOW() + INTERVAL '3 days'
-        `;
-    const filiaisParaCobrar = await db.query(filiaisParaCobrarQuery);
-
-    if (filiaisParaCobrar.rows.length === 0) {
-      console.log(
-        "🤖 Robô Cobrador: Nenhuma assinatura vencendo nos próximos 3 dias."
-      );
-      return;
-    }
-
-    console.log(
-      `🤖 Robô Cobrador: Encontradas ${filiaisParaCobrar.rows.length} faturas para enviar.`
-    );
-
-    for (const filial of filiaisParaCobrar.rows) {
-      const planoInfo = planosPrecos[filial.plano];
-      if (!planoInfo) continue; // Pula se o plano não tiver preço
-
-      // Cria um Pagamento ÚNICO no Mercado Pago
-      const preference = {
-        items: [
-          {
-            title: `Renovação Mensal Plano ${filial.plano} - Look Time`,
-            quantity: 1,
-            currency_id: "BRL",
-            unit_price: planoInfo.preco,
-          },
-        ],
-        payer: { email: filial.email },
-        back_urls: { success: `https://booki-agendamentos.vercel.app/` },
-        notification_url: `https://api-agendamento-saas.onrender.com/webhook/mercadopago`,
-      };
-
-      const pref = new Preference(mpClient);
-      const response = await pref.create({ body: preference });
-      const linkPagamento = response.init_point;
-
-      // Envia o link de cobrança por email
-      await enviarEmailCobranca(filial.email, linkPagamento, filial.plano);
-      console.log(
-        `🤖 Robô Cobrador: Email de cobrança enviado para ${filial.email}.`
-      );
-    }
-  } catch (error) {
-    console.error(
-      "🤖 Robô Cobrador: Erro ao gerar cobranças:",
-      error?.cause || error
-    );
-  }
-});
-// dbdd6d20e2f447c68a6a4b58c8262ce3
-// 7bd36f48c3c54a2ca25d46b6e635f551
-// 75d0d3c4fec54bc8a48b91311c4def1b
 
 // =================================================================
 // --- INICIALIZAÇÃO DO SERVIDOR ---
