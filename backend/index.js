@@ -13,14 +13,7 @@ const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
 const app = express();
 const port = 3001;
-const { MercadoPagoConfig, PreApproval } = require("mercadopago");
 const checkPlan = require("./middleware/checkPlan");
-
-const planos = {
-  individual: "dbdd6d20e2f447c68a6a4b58c8262ce3",
-  equipe: "7bd36f48c3c54a2ca25d46b6e635f551",
-  premium: "75d0d3c4fec54bc8a48b91311c4def1b",
-};
 
 // --- CONFIGURAÇÃO DE CORS (Cross-Origin Resource Sharing) ---
 const whitelist = [
@@ -42,9 +35,9 @@ const corsOptions = {
 };
 
 const planosHotmart = {
-  fiit6bbd: "individual",
-  ybntddyn: "equipe",
-  "6lphtre7": "premium",
+  'fiit6bbd': "individual",
+  'ybntddyn': "equipe",
+  '6lphtre7': "premium",
 };
 
 // =ISTO:
