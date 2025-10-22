@@ -43,11 +43,13 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
   const [nomeCliente, setNomeCliente] = useState("");
   const [telefoneCliente, setTelefoneCliente] = useState("");
   const [emailCliente, setEmailCliente] = useState("");
-
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState("");
   const [loadingData, setLoadingData] = useState(true);
+  const [clientesCadastrados, setClientesCadastrados] = useState([]);
+  const [selectedClientId, setSelectedClientId] = useState(null);
+  const [isNewClient, setIsNewClient] = useState(false);
 
   useEffect(() => {
     if (opened) {
@@ -66,12 +68,17 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
 
       const fetchInitialData = async () => {
         try {
-          const [servicosRes, equipeRes] = await Promise.all([
+          const [servicosRes, equipeRes, clientesRes] = await Promise.all([
             api.get("/servicos", {
               headers: { Authorization: `Bearer ${token}` },
             }),
             ["dono", "recepcionista"].includes(user?.role)
               ? api.get("/profissionais", {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+              : Promise.resolve({ data: [] }),
+            ["dono", "recepcionista"].includes(user?.role)
+              ? api.get("/clientes", {
                   headers: { Authorization: `Bearer ${token}` },
                 })
               : Promise.resolve({ data: [] }),
@@ -99,6 +106,19 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
       fetchInitialData();
     }
   }, [opened, user]);
+
+  const handleClienteChange = (value) => {
+    if (value) {
+      const cliente = clientesCadastrados.find((c) => c.value === value);
+      if (cliente) {
+        setNomeCliente(cliente.nome_cliente);
+        setEmailCliente(cliente.email_contato);
+        setTelefoneCliente(cliente.telefone_contato);
+        setSelectedClientId(cliente.id);
+        setIsNewClient(false);
+      }
+    }
+  };
 
   const handleDateChange = async (date) => {
     setSelectedDate(date);
@@ -337,6 +357,69 @@ const AdminAppointmentModal = ({ opened, onClose, onAppointmentCreated }) => {
             <Text size="sm" fw={500} mt="md">
               Dados do Cliente
             </Text>
+
+            {!isNewClient ? (
+              <>
+                <Select
+                  label="Buscar Cliente Cadastrado"
+                  placeholder="Digite o nome ou email do cliente"
+                  data={clientesCadastrados}
+                  value={selectedClientId}
+                  onChange={handleClienteChange}
+                  searchable
+                  clearable
+                  nothingFoundMessage="Nenhum cliente encontrado"
+                />
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={handleClearCliente}
+                  mt="xs"
+                >
+                  + Cadastrar Novo Cliente
+                </Anchor>
+              </>
+            ) : (
+              <Anchor
+                component="button"
+                type="button"
+                size="sm"
+                onClick={() => setIsNewClient(false)}
+                mb="md"
+              >
+                &larr; Voltar para a busca
+              </Anchor>
+            )}
+
+            <Stack mt="md">
+              <TextInput
+                label="Nome do cliente"
+                placeholder="Nome completo do cliente"
+                value={nomeCliente}
+                onChange={(e) => setNomeCliente(e.currentTarget.value)}
+                required
+                readOnly={!isNewClient && selectedClientId} // Bloqueia se um cliente foi selecionado
+              />
+              <TextInput
+                label="Email do cliente"
+                placeholder="email@cliente.com"
+                value={emailCliente}
+                onChange={(e) => setEmailCliente(e.currentTarget.value)}
+                required
+                type="email"
+                readOnly={!isNewClient && selectedClientId} // Bloqueia se um cliente foi selecionado
+              />
+              <TextInput
+                label="Telefone do cliente"
+                placeholder="(XX) XXXXX-XXXX"
+                value={telefoneCliente}
+                onChange={(e) => setTelefoneCliente(e.currentTarget.value)}
+                required
+                readOnly={!isNewClient && selectedClientId} // Bloqueia se um cliente foi selecionado
+              />
+            </Stack>
+
             <TextInput
               placeholder="Nome do cliente"
               value={nomeCliente}
