@@ -1648,19 +1648,6 @@ cron.schedule("*/30 * * * *", async () => {
   }
 });
 
-let mpClient;
-try {
-  console.log("Configurando o cliente Mercado Pago...");
-  mpClient = new MercadoPagoConfig({
-    accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
-    options: { timeout: 5000 },
-  });
-  console.log("Cliente Mercado Pago configurado com sucesso.");
-} catch (e) {
-  console.error("ERRO CRÍTICO AO CONFIGURAR O MERCADO PAGO:", e);
-}
-
-// --- WEBHOOK (ATUALIZADO) ---
 
 // 2. NOVO: Robô de Limpeza de Contas Pendentes
 console.log("Agendando robô de limpeza de contas pendentes...");
