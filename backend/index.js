@@ -22,6 +22,7 @@ const whitelist = [
   "https://barbearia-teste-booki-agendamentos.vercel.app",
 ];
 
+app.use(cors(corsOptions));
 const corsOptions = {
   origin: function (origin, callback) {
     // Permite requisições sem 'origin' (como apps mobile ou Postman/Insomnia)
@@ -41,91 +42,66 @@ const planosHotmart = {
 };
 
 // =ISTO:
-app.post(
-  "/webhook/hotmart",
-  express.json({ type: "application/json" }),
-  async (req, res) => {
+app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (req, res) => {
     console.log("--- NOTIFICAÇÃO DA HOTMART RECEBIDA ---");
+    console.log("Body:", req.body);
 
-    // 1. Verificação de segurança (Opcional, mas recomendado)
-    const hottok = req.headers["hotmart_hottok"];
+    const hottok = req.headers['hotmart_hottok'];
     if (hottok !== process.env.HOTMART_HOTTOK) {
-      console.warn("[WEBHOOK] Assinatura Hottok inválida recebida.");
-      return res.status(401).send("Assinatura inválida.");
+        console.warn("[WEBHOOK] Assinatura Hottok inválida recebida.");
+        return res.status(401).send("Assinatura inválida.");
     }
-
+    
     try {
-      const { event, data } = req.body;
-      const payerEmail = data?.buyer?.email;
-      const productId = data?.product?.id.toString(); // Converte para string para garantir
-      const status = data?.purchase?.status || data?.subscription?.status;
+        const { event, data } = req.body;
+        const payerEmail = data?.buyer?.email;
+        const productId = data?.product?.id.toString();
+        const status = data?.purchase?.status || data?.subscription?.status;
 
-      if (!event || !payerEmail || !productId) {
-        return res.status(400).send("Dados insuficientes na notificação.");
-      }
+        if (!event || !payerEmail || !productId) {
+            return res.status(400).send("Dados insuficientes na notificação.");
+        }
 
-      // 2. Mapeia o ID do produto da Hotmart para o nome do nosso plano
-      const nomeDoPlano = planosHotmart[productId];
-      if (!nomeDoPlano) {
-        console.error(
-          `[WEBHOOK] ERRO: ID de produto ${productId} não reconhecido.`
-        );
-        return res.status(200).send("OK (Produto não mapeado)");
-      }
+        const nomeDoPlano = planosHotmart[productId];
+        if (!nomeDoPlano) {
+            console.error(`[WEBHOOK] ERRO: ID de produto ${productId} não reconhecido.`);
+            return res.status(200).send("OK (Produto não mapeado)");
+        }
 
-      // 3. Atualiza o banco de dados com base no evento
-      let novoStatusPlano = null;
-      let novaDataVencimento = null;
+        let novoStatusPlano = null;
+        let novaDataVencimento = null;
 
-      if (event === "PURCHASE_APPROVED" || status === "ACTIVE") {
-        novoStatusPlano = nomeDoPlano;
-        // Define a data de vencimento (Hotmart envia 'date_next_charge', mas +30 dias é mais simples)
-        novaDataVencimento = new Date();
-        novaDataVencimento.setDate(novaDataVencimento.getDate() + 30);
-      } else if (
-        event === "SUBSCRIPTION_CANCELED" ||
-        status === "CANCELED" ||
-        status === "REFUSED"
-      ) {
-        novoStatusPlano = "pendente_pagamento"; // Reverte para pendente
-        novaDataVencimento = new Date(); // Vencimento imediato
-      }
+        if (event === 'PURCHASE_APPROVED' || status === 'ACTIVE') {
+            novoStatusPlano = nomeDoPlano;
+            novaDataVencimento = new Date();
+            novaDataVencimento.setDate(novaDataVencimento.getDate() + 30);
+        } else if (event === 'SUBSCRIPTION_CANCELED' || status === 'CANCELED' || status === 'REFUSED') {
+            novoStatusPlano = 'pendente_pagamento';
+            novaDataVencimento = new Date();
+        }
 
-      if (novoStatusPlano && novaDataVencimento) {
-        const updateUserPlanQuery = `
+        if (novoStatusPlano && novaDataVencimento) {
+            const updateUserPlanQuery = `
                 UPDATE filial SET plano = $1, assinatura_vence_em = $2
                 WHERE id = (SELECT filial_id FROM profissional WHERE email = $3 AND role = 'dono');
             `;
-        const updateResult = await db.query(updateUserPlanQuery, [
-          novoStatusPlano,
-          novaDataVencimento.toISOString(),
-          payerEmail,
-        ]);
+            const updateResult = await db.query(updateUserPlanQuery, [novoStatusPlano, novaDataVencimento.toISOString(), payerEmail]);
 
-        if (updateResult.rowCount > 0) {
-          console.log(
-            `[WEBHOOK] SUCESSO: Usuário ${payerEmail} atualizado para '${novoStatusPlano}'.`
-          );
-        } else {
-          console.error(
-            `[WEBHOOK] FALHA: Nenhum usuário 'dono' com o email ${payerEmail} foi encontrado.`
-          );
+            if (updateResult.rowCount > 0) {
+                console.log(`[WEBHOOK] SUCESSO: Usuário ${payerEmail} atualizado para '${novoStatusPlano}'.`);
+            } else {
+                console.error(`[WEBHOOK] FALHA: Nenhum usuário 'dono' com o email ${payerEmail} foi encontrado.`);
+            }
         }
-      }
-
-      res.status(200).send("OK");
+        
+        res.status(200).send("OK");
     } catch (error) {
-      console.error(
-        "[WEBHOOK] Erro ao processar notificação da Hotmart:",
-        error
-      );
-      res.status(200).send("Erro interno ao processar");
+        console.error("[WEBHOOK] Erro ao processar notificação da Hotmart:", error);
+        res.status(200).send("Erro interno ao processar");
     }
-  }
-);
+});
 
 app.use(express.json());
-app.use(cors(corsOptions));
 
 // =================================================================
 // --- NOVA SUPER-ROTA DE REGISTRO DE NEGÓCIO ---
