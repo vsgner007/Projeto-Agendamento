@@ -22,7 +22,7 @@ const whitelist = [
   "https://barbearia-teste-booki-agendamentos.vercel.app",
 ];
 
-app.use(cors(corsOptions));
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Permite requisições sem 'origin' (como apps mobile ou Postman/Insomnia)
@@ -34,6 +34,8 @@ const corsOptions = {
     }
   },
 };
+
+app.use(cors(corsOptions));
 
 const planosHotmart = {
   'fiit6bbd': "individual",
