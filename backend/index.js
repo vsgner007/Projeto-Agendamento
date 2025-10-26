@@ -47,7 +47,7 @@ app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (
     console.log("--- NOTIFICAÇÃO DA HOTMART RECEBIDA ---");
     console.log("Body:", req.body);
 
-    const hottok = req.headers['hottok'];
+    const hottok = req.headers['hottok'] || req.body.hottok;
     if (hottok !== process.env.HOTMART_HOTTOK) {
         console.warn("[WEBHOOK] Assinatura Hottok inválida recebida.");
         return res.status(401).send("Assinatura inválida.");
