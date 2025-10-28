@@ -80,7 +80,6 @@ function LandingPage() {
 
           {/* MENU DESKTOP */}
           <Group visibleFrom="sm">
-            {/* 2. Botão de Suporte Adicionado */}
             <Button
               component="a"
               href="mailto: vsgner032@gmail.com"
@@ -98,16 +97,17 @@ function LandingPage() {
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" />
         </Group>
 
-        {/* MENU MOBILE */}
-        <Drawer opened={opened} onClose={close} padding="md" size="xs">
+        {/* --- MENU MOBILE CORRIGIDO --- */}
+        <Drawer opened={opened} onClose={close} padding="md" size="auto" title="Navegação">
           <Stack>
             <Button
-              component={Link}
-              to="/cliente/login"
+              component="a"
+              href="mailto: vsgner032@gmail.com"
               variant="default"
+              leftSection={<IconHelp size={16} />}
               onClick={close}
             >
-              Login do Cliente
+              Suporte
             </Button>
             <Button component={Link} to="/login" onClick={close}>
               Acesso Profissional
