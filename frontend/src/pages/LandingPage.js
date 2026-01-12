@@ -19,37 +19,11 @@ import { IconCheck, IconHelp } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 const planos = [
-  {
-    id: "individual",
-    nome: "Individual",
-    preco: "R$ 29,90/mês",
-    link: "/cadastro-dono?plano=individual",
-    features: [
-      "Apenas 1 dono",
-      "Nenhum funcionário",
-      "Agenda online",
-      "Gestão de serviços e clientes",
-      "Agendamentos ilimitados",
-      "Suporte",
-    ],
-  },
-  {
-    id: "equipe",
-    nome: "Equipe",
-    preco: "R$ 79,90/mês",
-    link: "/cadastro-dono?plano=equipe",
-    features: [
-      "Agenda online",
-      "Gestão de serviços e clientes",
-      "Gestão de equipe (até 3 funcionários)",
-      "Relatório financeiro e análise",
-      "Suporte",
-    ],
-  },
+
   {
     id: "premium",
     nome: "Premium",
-    preco: "R$ 129,90/mês",
+    preco: "R$ 49,90/mês",
     link: "/cadastro-dono?plano=premium",
     features: [
       "Agenda online",
