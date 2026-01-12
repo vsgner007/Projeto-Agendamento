@@ -13,20 +13,18 @@ const crypto = require("crypto");
 const { enviarEmailReset } = require("./email");
 const app = express();
 const port = 3001;
-const checkPlan = require("./middleware/checkPlan");
 
-// --- CONFIGURAÇÃO DE CORS (Cross-Origin Resource Sharing) ---
+// --- REMOVIDO: const checkPlan = require("./middleware/checkPlan"); ---
+
+// --- CONFIGURAÇÃO DE CORS ---
 const whitelist = [
-  "http://localhost:3000", // Para seu desenvolvimento local
-  "https://booki-agendamentos.vercel.app", // A URL EXATA do seu frontend na Vercel
+  "http://localhost:3000",
+  "https://booki-agendamentos.vercel.app",
   "https://barbearia-teste-booki-agendamentos.vercel.app",
 ];
 
-
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permite requisições sem 'origin' (como apps mobile ou Postman/Insomnia)
-    // e requisições cuja origem está na nossa lista de permissões.
     if (!origin || whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -36,21 +34,20 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(express.json());
 
+// --- MAPA DE PLANOS SIMPLIFICADO ---
+// Agora todos os IDs da Hotmart ativam o mesmo plano "pro" (acesso total)
 const planosHotmart = {
-  'fiit6bbd': "individual",
-  'ybntddyn': "equipe",
-  '6lphtre7': "premium",
+  'fiit6bbd': "pro", 
+  'ybntddyn': "pro",
+  '6lphtre7': "pro",
 };
 
 app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (req, res) => {
     console.log("--- NOTIFICAÇÃO DA HOTMART RECEBIDA ---");
-    console.log("Body:", req.body);
-
+    
     const hottok = req.headers['hottok'] || req.body.hottok;
-
-    console.log(`[DEBUG] Token Recebido: ${hottok}`);
-    console.log(`[DEBUG] Token Esperado: ${process.env.HOTMART_HOTTOK}`);
 
     if (hottok !== process.env.HOTMART_HOTTOK) {
         console.warn("[WEBHOOK] Assinatura Hottok inválida recebida.");
@@ -67,7 +64,9 @@ app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (
             return res.status(400).send("Dados insuficientes na notificação.");
         }
 
+        // Se o produto estiver na lista, vira "pro", senão loga erro.
         const nomeDoPlano = planosHotmart[productId];
+        
         if (!nomeDoPlano) {
             console.error(`[WEBHOOK] ERRO: ID de produto ${productId} não reconhecido.`);
             return res.status(200).send("OK (Produto não mapeado)");
@@ -77,7 +76,7 @@ app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (
         let novaDataVencimento = null;
 
         if (event === 'PURCHASE_APPROVED' || status === 'ACTIVE') {
-            novoStatusPlano = nomeDoPlano;
+            novoStatusPlano = nomeDoPlano; // Será sempre "pro"
             novaDataVencimento = new Date();
             novaDataVencimento.setDate(novaDataVencimento.getDate() + 30);
         } else if (event === 'SUBSCRIPTION_CANCELED' || status === 'CANCELED' || status === 'REFUSED') {
@@ -106,52 +105,41 @@ app.post("/webhook/hotmart", express.json({ type: 'application/json' }), async (
     }
 });
 
-app.use(express.json());
-
 // =================================================================
 // --- NOVA SUPER-ROTA DE REGISTRO DE NEGÓCIO ---
 // =================================================================
-// dentro de backend/index.js
 app.post("/registrar-negocio", async (req, res) => {
   const client = await db.getClient();
   try {
     const { nomeDono, emailDono, senhaDono, nomeFilial } = req.body;
 
     if (!nomeDono || !emailDono || !senhaDono || !nomeFilial) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+      return res.status(400).json({ message: "Todos os campos são obrigatórios." });
     }
 
     await client.query("BEGIN");
 
-    // --- CORREÇÕES APLICADAS AQUI ---
-    // 1. Normaliza (ã -> a) e limpa o nome da filial
     const nomeBase = nomeFilial
       .toLowerCase()
-      .normalize("NFD") // Separa "ã" em "a" e "~"
-      .replace(/[\u0300-\u036f]/g, "") // Remove os acentos (o "~")
-      .replace(/\s+/g, "-") // Substitui espaços por hífens
-      .replace(/[^a-z0-9-]/g, ""); // Remove quaisquer outros caracteres especiais
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
 
-    // 2. Adiciona o sufixo da marca
     const subdomain = `${nomeBase}-booki-agendamentos`;
-    // --- FIM DAS CORREÇÕES ---
 
-    // 3. Salva a filial com o plano pendente E o novo subdomínio corrigido
     const filialQuery =
       "INSERT INTO filial (nome_filial, plano, subdomain) VALUES ($1, $2, $3) RETURNING id";
     const filialResult = await client.query(filialQuery, [
       nomeFilial,
       "pendente_pagamento",
-      subdomain, // Usa o novo subdomínio corrigido
+      subdomain,
     ]);
     const novaFilialId = filialResult.rows[0].id;
 
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaDono, salt);
 
-    // 4. Adiciona 'config_horarios' padrão (código existente e correto)
     const donoQuery =
       "INSERT INTO profissional (nome, email, senha_hash, role, filial_id, config_horarios) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role";
     const defaultConfig = {
@@ -175,16 +163,13 @@ app.post("/registrar-negocio", async (req, res) => {
     await client.query("COMMIT");
 
     res.status(201).json({
-      message:
-        "Negócio registrado com sucesso. Redirecionando para pagamento...",
+      message: "Negócio registrado com sucesso. Redirecionando para pagamento...",
       user: donoResult.rows[0],
     });
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {
-      return res
-        .status(409)
-        .json({ message: "Este email já está em uso por outro profissional." });
+      return res.status(409).json({ message: "Este email já está em uso por outro profissional." });
     }
     console.error("ERRO CRÍTICO NO REGISTRO DE NEGÓCIO:", error);
     res.status(500).json({ message: "Falha ao registrar novo negócio." });
@@ -215,9 +200,7 @@ app.get("/publico/filial/:subdomain", async (req, res) => {
 
 app.get("/publico/filiais", async (req, res) => {
   try {
-    const result = await db.query(
-      "SELECT id, nome_filial FROM filial ORDER BY nome_filial"
-    );
+    const result = await db.query("SELECT id, nome_filial FROM filial ORDER BY nome_filial");
     res.status(200).json(result.rows);
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -240,7 +223,6 @@ app.get("/publico/profissionais/:filialId", async (req, res) => {
 app.get("/publico/servicos/:profissionalId", async (req, res) => {
   try {
     const { profissionalId } = req.params;
-    // A lógica agora é a mesma para TODOS: busca na tabela de associação.
     const queryText = `
         SELECT s.id, s.nome_servico, s.duracao_minutos, s.preco 
         FROM servico s 
@@ -259,21 +241,18 @@ app.get("/publico/agenda/:profissionalId", async (req, res) => {
   try {
     const { profissionalId } = req.params;
     const { data } = req.query;
-    if (!data)
-      return res.status(400).json({ message: "A data é obrigatória." });
+    if (!data) return res.status(400).json({ message: "A data é obrigatória." });
+    
     const agendamentosResult = await db.query(
       `SELECT data_hora_inicio, data_hora_fim FROM carrinho_agendamento WHERE profissional_id = $1 AND data_hora_inicio::date = $2`,
       [profissionalId, data]
     );
     const donoHorarioQuery = `SELECT p_dono.config_horarios FROM profissional p_func JOIN filial f ON p_func.filial_id = f.id JOIN profissional p_dono ON f.id = p_dono.filial_id WHERE p_func.id = $1 AND p_dono.role = 'dono';`;
-    const donoHorarioResult = await db.query(donoHorarioQuery, [
-      profissionalId,
-    ]);
+    const donoHorarioResult = await db.query(donoHorarioQuery, [profissionalId]);
+    
     if (donoHorarioResult.rows.length === 0)
-      return res.status(404).json({
-        message:
-          "Não foi possível encontrar o horário de trabalho para este profissional.",
-      });
+      return res.status(404).json({ message: "Não foi possível encontrar o horário de trabalho." });
+    
     res.status(200).json({
       horariosOcupados: agendamentosResult.rows,
       horarioTrabalho: donoHorarioResult.rows[0].config_horarios,
@@ -288,59 +267,29 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
   try {
     await client.query("BEGIN");
     const { profissionalId } = req.params;
-    const {
-      servicos_ids,
-      nome_cliente,
-      telefone_cliente,
-      email_cliente,
-      senha_cliente,
-      data_hora_inicio,
-    } = req.body;
+    const { servicos_ids, nome_cliente, telefone_cliente, email_cliente, senha_cliente, data_hora_inicio } = req.body;
 
-    if (
-      !servicos_ids ||
-      servicos_ids.length === 0 ||
-      !nome_cliente ||
-      !telefone_cliente ||
-      !email_cliente ||
-      !data_hora_inicio
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+    if (!servicos_ids || servicos_ids.length === 0 || !nome_cliente || !telefone_cliente || !email_cliente || !data_hora_inicio) {
+      return res.status(400).json({ message: "Todos os campos são obrigatórios." });
     }
 
     const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
-    const servicosInfoResult = await client.query(servicosInfoQuery, [
-      servicos_ids,
-    ]);
+    const servicosInfoResult = await client.query(servicosInfoQuery, [servicos_ids]);
     if (servicosInfoResult.rows.length !== servicos_ids.length)
       throw new Error("Um ou mais serviços não foram encontrados.");
 
-    const duracao_total_minutos = servicosInfoResult.rows.reduce(
-      (acc, s) => acc + s.duracao_minutos,
-      0
-    );
-    const preco_total = servicosInfoResult.rows.reduce(
-      (acc, s) => acc + parseFloat(s.preco),
-      0
-    );
+    const duracao_total_minutos = servicosInfoResult.rows.reduce((acc, s) => acc + s.duracao_minutos, 0);
+    const preco_total = servicosInfoResult.rows.reduce((acc, s) => acc + parseFloat(s.preco), 0);
     const dataInicio = new Date(data_hora_inicio);
-    const dataFim = new Date(
-      dataInicio.getTime() + duracao_total_minutos * 60000
-    );
+    const dataFim = new Date(dataInicio.getTime() + duracao_total_minutos * 60000);
 
     let cliente;
-    const clienteExistente = await client.query(
-      "SELECT * FROM cliente WHERE email_contato = $1",
-      [email_cliente]
-    );
+    const clienteExistente = await client.query("SELECT * FROM cliente WHERE email_contato = $1", [email_cliente]);
 
     if (clienteExistente.rows.length > 0) {
       cliente = clienteExistente.rows[0];
     } else {
-      if (!senha_cliente)
-        throw new Error("A senha é obrigatória para novos clientes.");
+      if (!senha_cliente) throw new Error("A senha é obrigatória para novos clientes.");
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha_cliente, salt);
       const novoCliente = await client.query(
@@ -361,7 +310,6 @@ app.post("/publico/agendamentos-carrinho/:profissionalId", async (req, res) => {
     ]);
     const carrinho_id = carrinhoResult.rows[0].id;
 
-    // LÓGICA DE ASSOCIAÇÃO RESTAURADA E GARANTIDA
     const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
     for (const servico_id of servicos_ids) {
       await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
@@ -386,11 +334,8 @@ app.post("/login", async (req, res) => {
   try {
     const { email, senha } = req.body;
     if (!email || !senha)
-      return res
-        .status(400)
-        .json({ message: "Email e senha são obrigatórios." });
+      return res.status(400).json({ message: "Email e senha são obrigatórios." });
 
-    // Busca o profissional e faz um JOIN para pegar todas as infos da filial
     const queryText = `
             SELECT p.*, f.plano, f.subdomain, f.assinatura_vence_em 
             FROM profissional p 
@@ -407,65 +352,44 @@ app.post("/login", async (req, res) => {
     if (!senhaCorreta)
       return res.status(401).json({ message: "Credenciais inválidas." });
 
-    // Adiciona 'assinatura_vence_em' ao payload do token
     const payload = {
       id: profissional.id,
       nome: profissional.nome,
       role: profissional.role,
       plano: profissional.plano,
       subdomain: profissional.subdomain,
-      assinatura_vence_em: profissional.assinatura_vence_em, // NOVO
+      assinatura_vence_em: profissional.assinatura_vence_em,
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: "1d",
-    });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
     res.status(200).json({ token });
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 });
 
+// --- ROTA LIMPA: CRIAÇÃO DE FUNCIONÁRIOS ---
+// Removida a verificação checkPlan e a contagem de funcionários
 app.post(
   "/profissionais",
   authMiddleware,
   checkRole(["dono"]),
-  checkPlan(["equipe", "premium"]),
   async (req, res) => {
     try {
-      const { id: donoId, plano } = req.profissional;
+      const { id: donoId } = req.profissional; // Não precisamos mais do 'plano' aqui
       const { nome, email, senha, role, especialidade } = req.body;
 
       if (!nome || !email || !senha || !role)
-        return res.status(400).json({
-          message: "Nome, email, senha e papel (role) são obrigatórios.",
-        });
+        return res.status(400).json({ message: "Nome, email, senha e papel (role) são obrigatórios." });
 
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [donoId]
-      );
+      const filialResult = await db.query("SELECT filial_id FROM profissional WHERE id = $1", [donoId]);
+      
       if (!filialResult.rows[0]?.filial_id)
-        return res.status(400).json({
-          message: "Administrador não está associado a uma filial válida.",
-        });
+        return res.status(400).json({ message: "Administrador não está associado a uma filial válida." });
+      
       const filial_id = filialResult.rows[0].filial_id;
 
-      // --- LÓGICA DE LIMITE DE PLANO ---
-      if (plano === "equipe") {
-        const countQuery =
-          "SELECT COUNT(id) FROM profissional WHERE filial_id = $1 AND role = 'funcionario'";
-        const countResult = await db.query(countQuery, [filial_id]);
-        const totalFuncionarios = parseInt(countResult.rows[0].count, 10);
-        if (totalFuncionarios >= 3) {
-          return res.status(403).json({
-            message:
-              "Limite de 3 funcionários atingido para o Plano Equipe. Considere fazer um upgrade.",
-          });
-        }
-      }
-      // Se for 'premium', não há limite e o código continua
-      // --- FIM DA LÓGICA DE LIMITE ---
+      // REMOVIDO: Bloco de contagem de funcionários (limite do plano equipe)
 
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
@@ -483,9 +407,7 @@ app.post(
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")
-        return res
-          .status(409)
-          .json({ message: "Este email já está cadastrado." });
+        return res.status(409).json({ message: "Este email já está cadastrado." });
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   }
@@ -498,14 +420,9 @@ app.get(
   async (req, res) => {
     try {
       const usuarioLogadoId = req.profissional.id;
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [usuarioLogadoId]
-      );
+      const filialResult = await db.query("SELECT filial_id FROM profissional WHERE id = $1", [usuarioLogadoId]);
       if (!filialResult.rows[0]?.filial_id)
-        return res
-          .status(400)
-          .json({ message: "Usuário não está associado a uma filial." });
+        return res.status(400).json({ message: "Usuário não está associado a uma filial." });
       const filial_id = filialResult.rows[0].filial_id;
 
       const queryText = `SELECT id, nome, email, role, especialidade FROM profissional WHERE filial_id = $1 ORDER BY nome;`;
@@ -528,29 +445,17 @@ app.put(
       const { nome, email, role, especialidade } = req.body;
 
       if (!nome || !email || !role)
-        return res
-          .status(400)
-          .json({ message: "Nome, email e papel são obrigatórios." });
+        return res.status(400).json({ message: "Nome, email e papel são obrigatórios." });
 
       const queryText = `UPDATE profissional SET nome = $1, email = $2, role = $3, especialidade = $4 WHERE id = $5 RETURNING id, nome, email, role, especialidade;`;
-      const result = await db.query(queryText, [
-        nome,
-        email,
-        role,
-        especialidade,
-        profissional_id,
-      ]);
+      const result = await db.query(queryText, [nome, email, role, especialidade, profissional_id]);
 
       if (result.rowCount === 0)
-        return res
-          .status(404)
-          .json({ message: "Profissional não encontrado." });
+        return res.status(404).json({ message: "Profissional não encontrado." });
       res.status(200).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505")
-        return res
-          .status(409)
-          .json({ message: "Este email já está em uso por outro usuário." });
+        return res.status(409).json({ message: "Este email já está em uso por outro usuário." });
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   }
@@ -563,13 +468,9 @@ app.delete(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.params;
-      const result = await db.query("DELETE FROM profissional WHERE id = $1", [
-        profissional_id,
-      ]);
+      const result = await db.query("DELETE FROM profissional WHERE id = $1", [profissional_id]);
       if (result.rowCount === 0)
-        return res
-          .status(404)
-          .json({ message: "Profissional não encontrado." });
+        return res.status(404).json({ message: "Profissional não encontrado." });
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -593,56 +494,7 @@ app.get(
   }
 );
 
-app.post(
-  "/profissionais",
-  authMiddleware,
-  checkRole(["dono"]),
-  checkPlan(["equipe", "premium"]),
-  async (req, res) => {
-    try {
-      const donoId = req.profissional.id;
-      // 1. Recebe a nova 'especialidade'
-      const { nome, email, senha, role, especialidade } = req.body;
-
-      if (!nome || !email || !senha || !role)
-        return res.status(400).json({
-          message: "Nome, email, senha e papel (role) são obrigatórios.",
-        });
-
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [donoId]
-      );
-      if (!filialResult.rows[0]?.filial_id)
-        return res.status(400).json({
-          message: "Administrador não está associado a uma filial válida.",
-        });
-      const filial_id = filialResult.rows[0].filial_id;
-
-      const salt = await bcrypt.genSalt(10);
-      const senhaHash = await bcrypt.hash(senha, salt);
-
-      // 2. Adiciona 'especialidade' ao INSERT
-      const queryText = `INSERT INTO profissional (nome, email, senha_hash, role, filial_id, especialidade) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome, email, role, especialidade;`;
-      const result = await db.query(queryText, [
-        nome,
-        email,
-        senhaHash,
-        role,
-        filial_id,
-        especialidade,
-      ]);
-
-      res.status(201).json(result.rows[0]);
-    } catch (error) {
-      if (error.code === "23505")
-        return res
-          .status(409)
-          .json({ message: "Este email já está cadastrado." });
-      res.status(500).json({ message: "Erro interno do servidor." });
-    }
-  }
-);
+// --- REMOVIDO: Rota duplicada de POST /profissionais que existia aqui ---
 
 app.post(
   "/profissionais/:id/servicos",
@@ -653,9 +505,7 @@ app.post(
       const { id: profissional_id } = req.params;
       const { servico_id } = req.body;
       if (!servico_id)
-        return res
-          .status(400)
-          .json({ message: "O ID do serviço é obrigatório." });
+        return res.status(400).json({ message: "O ID do serviço é obrigatório." });
       const queryText = `INSERT INTO profissional_servico (profissional_id, servico_id) VALUES ($1, $2)`;
       await db.query(queryText, [profissional_id, servico_id]);
       res.status(201).json({ message: "Serviço associado com sucesso." });
@@ -693,12 +543,10 @@ app.get(
       if (!mes || !ano)
         return res.status(400).json({ message: "Mês e ano são obrigatórios." });
 
-      // Busca a comissão da filial
       const comissaoQuery = `SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1`;
       const comissaoResult = await db.query(comissaoQuery, [profissional_id]);
       const comissao = comissaoResult.rows[0]?.comissao_percentual || 50;
 
-      // Busca os agendamentos concluídos do funcionário no período
       const queryText = `
             SELECT ca.data_hora_inicio, c.nome_cliente, ca.preco_total,
                    (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
@@ -711,7 +559,6 @@ app.get(
         `;
       const result = await db.query(queryText, [profissional_id, mes, ano]);
 
-      // Calcula o valor líquido para cada serviço
       const relatorio = result.rows.map((item) => {
         const precoBruto = parseFloat(item.preco_total);
         const valorAReceber = precoBruto * (1 - comissao / 100);
@@ -727,6 +574,7 @@ app.get(
     }
   }
 );
+
 // =================================================================
 // --- ROTAS PROTEGIDAS DO PAINEL ---
 // =================================================================
@@ -735,7 +583,6 @@ app.get(
 app.get("/servicos", authMiddleware, async (req, res) => {
   try {
     const { id: profissional_id } = req.profissional;
-    // Lógica unificada: qualquer profissional logado vê todos os serviços da sua filial
     const queryText = `
         SELECT s.* FROM servico s
         JOIN profissional p_dono ON s.profissional_id = p_dono.id
@@ -754,12 +601,7 @@ app.post("/servicos", authMiddleware, checkRole(["dono"]), async (req, res) => {
     const { id: profissional_id } = req.profissional;
     const { nome_servico, duracao_minutos, preco } = req.body;
     const queryText = `INSERT INTO servico (nome_servico, duracao_minutos, preco, profissional_id) VALUES ($1, $2, $3, $4) RETURNING *;`;
-    const result = await db.query(queryText, [
-      nome_servico,
-      duracao_minutos,
-      preco,
-      profissional_id,
-    ]);
+    const result = await db.query(queryText, [nome_servico, duracao_minutos, preco, profissional_id]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -776,21 +618,11 @@ app.put(
       const { id: profissional_id } = req.profissional;
       const { nome_servico, duracao_minutos, preco } = req.body;
       if (!nome_servico || !duracao_minutos || !preco)
-        return res
-          .status(400)
-          .json({ message: "Todos os campos são obrigatórios." });
+        return res.status(400).json({ message: "Todos os campos são obrigatórios." });
       const queryText = `UPDATE servico SET nome_servico = $1, duracao_minutos = $2, preco = $3, atualizado_em = NOW() WHERE id = $4 AND profissional_id = $5 RETURNING *;`;
-      const result = await db.query(queryText, [
-        nome_servico,
-        duracao_minutos,
-        preco,
-        servico_id,
-        profissional_id,
-      ]);
+      const result = await db.query(queryText, [nome_servico, duracao_minutos, preco, servico_id, profissional_id]);
       if (result.rowCount === 0)
-        return res
-          .status(404)
-          .json({ message: "Serviço não encontrado ou não pertence a você." });
+        return res.status(404).json({ message: "Serviço não encontrado ou não pertence a você." });
       res.status(200).json(result.rows[0]);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -806,10 +638,7 @@ app.delete(
     try {
       const { id: servico_id } = req.params;
       const { id: profissional_id } = req.profissional;
-      const result = await db.query(
-        "DELETE FROM servico WHERE id = $1 AND profissional_id = $2",
-        [servico_id, profissional_id]
-      );
+      const result = await db.query("DELETE FROM servico WHERE id = $1 AND profissional_id = $2", [servico_id, profissional_id]);
       if (result.rowCount === 0)
         return res.status(404).json({ message: "Serviço não encontrado." });
       res.status(204).send();
@@ -826,7 +655,6 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
     let queryText;
     let values;
 
-    // Query base corrigida para ser mais robusta e incluir todas as colunas necessárias
     const baseQuery = `
           SELECT 
               ca.id, 
@@ -848,105 +676,55 @@ app.get("/agendamentos", authMiddleware, async (req, res) => {
       `;
 
     if (role === "dono" || role === "recepcionista") {
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [profissional_id]
-      );
+      const filialResult = await db.query("SELECT filial_id FROM profissional WHERE id = $1", [profissional_id]);
       const filial_id = filialResult.rows[0]?.filial_id;
       if (!filial_id)
-        return res
-          .status(200)
-          .json({ agendamentos: [], horarioTrabalho: null });
+        return res.status(200).json({ agendamentos: [], horarioTrabalho: null });
       queryText = `${baseQuery} WHERE p.filial_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [filial_id];
     } else {
-      // Se for 'funcionario'
       queryText = `${baseQuery} WHERE ca.profissional_id = $1 ORDER BY ca.data_hora_inicio ASC;`;
       values = [profissional_id];
     }
 
     const agendamentosResult = await db.query(queryText, values);
-    const profissionalResult = await db.query(
-      "SELECT config_horarios FROM profissional WHERE id = $1",
-      [profissional_id]
-    );
+    const profissionalResult = await db.query("SELECT config_horarios FROM profissional WHERE id = $1", [profissional_id]);
 
     res.status(200).json({
       agendamentos: agendamentosResult.rows,
-      horarioTrabalho:
-        profissionalResult.rows.length > 0
-          ? profissionalResult.rows[0].config_horarios
-          : null,
+      horarioTrabalho: profissionalResult.rows.length > 0 ? profissionalResult.rows[0].config_horarios : null,
     });
   } catch (error) {
     console.error("ERRO DETALHADO AO LISTAR AGENDAMENTOS:", error);
-    res
-      .status(500)
-      .json({ message: "Erro interno do servidor ao listar agendamentos." });
+    res.status(500).json({ message: "Erro interno do servidor ao listar agendamentos." });
   }
 });
 
-// --- ROTA CORRIGIDA ---
 app.post("/agendamentos", authMiddleware, async (req, res) => {
   const client = await db.getClient();
   try {
     await client.query("BEGIN");
     const { id: logado_id, role } = req.profissional;
-    const {
-      servicos_ids,
-      nome_cliente,
-      telefone_cliente,
-      email_cliente,
-      data_hora_inicio,
-      agendado_para_id,
-    } = req.body;
+    const { servicos_ids, nome_cliente, telefone_cliente, email_cliente, data_hora_inicio, agendado_para_id } = req.body;
 
-    const profissional_final_id =
-      role === "dono" || role === "recepcionista"
-        ? agendado_para_id
-        : logado_id;
-    if (
-      !servicos_ids ||
-      servicos_ids.length === 0 ||
-      !nome_cliente ||
-      !telefone_cliente ||
-      !email_cliente ||
-      !data_hora_inicio ||
-      !profissional_final_id
-    ) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+    const profissional_final_id = (role === "dono" || role === "recepcionista") ? agendado_para_id : logado_id;
+    if (!servicos_ids || servicos_ids.length === 0 || !nome_cliente || !telefone_cliente || !email_cliente || !data_hora_inicio || !profissional_final_id) {
+      return res.status(400).json({ message: "Todos os campos são obrigatórios." });
     }
 
     const servicosInfoQuery = `SELECT id, duracao_minutos, preco FROM servico WHERE id = ANY($1::uuid[])`;
-    const servicosInfoResult = await client.query(servicosInfoQuery, [
-      servicos_ids,
-    ]);
+    const servicosInfoResult = await client.query(servicosInfoQuery, [servicos_ids]);
     if (servicosInfoResult.rows.length !== servicos_ids.length) {
-      throw new Error(
-        "Um ou mais serviços selecionados não foram encontrados."
-      );
+      throw new Error("Um ou mais serviços selecionados não foram encontrados.");
     }
 
-    const duracao_total_minutos = servicosInfoResult.rows.reduce(
-      (acc, s) => acc + s.duracao_minutos,
-      0
-    );
-    const preco_total = servicosInfoResult.rows.reduce(
-      (acc, s) => acc + parseFloat(s.preco),
-      0
-    );
+    const duracao_total_minutos = servicosInfoResult.rows.reduce((acc, s) => acc + s.duracao_minutos, 0);
+    const preco_total = servicosInfoResult.rows.reduce((acc, s) => acc + parseFloat(s.preco), 0);
     const dataInicio = new Date(data_hora_inicio);
-    const dataFim = new Date(
-      dataInicio.getTime() + duracao_total_minutos * 60000
-    );
+    const dataFim = new Date(dataInicio.getTime() + duracao_total_minutos * 60000);
 
     let cliente;
-    const clienteExistente = await client.query(
-      "SELECT * FROM cliente WHERE email_contato = $1",
-      [email_cliente]
-    );
+    const clienteExistente = await client.query("SELECT * FROM cliente WHERE email_contato = $1", [email_cliente]);
     if (clienteExistente.rows.length > 0) {
       cliente = clienteExistente.rows[0];
     } else {
@@ -968,7 +746,6 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
     ]);
     const carrinho_id = carrinhoResult.rows[0].id;
 
-    // LÓGICA DE ASSOCIAÇÃO RESTAURADA E GARANTIDA
     const carrinhoServicoQuery = `INSERT INTO carrinho_servico (carrinho_id, servico_id) VALUES ($1, $2)`;
     for (const servico_id of servicos_ids) {
       await client.query(carrinhoServicoQuery, [carrinho_id, servico_id]);
@@ -985,22 +762,17 @@ app.post("/agendamentos", authMiddleware, async (req, res) => {
   }
 });
 
-// ROTA DE ATUALIZAÇÃO CORRIGIDA
 app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
   try {
     const { id: agendamento_id } = req.params;
     const { id: profissional_id, role } = req.profissional;
     const { status } = req.body;
     if (!status)
-      return res
-        .status(400)
-        .json({ message: "O campo status é obrigatório para atualização." });
+      return res.status(400).json({ message: "O campo status é obrigatório para atualização." });
 
     let queryText;
     let values;
 
-    // Adicionamos a coluna 'atualizado_em' que faltava na tabela carrinho_agendamento
-    // E garantimos que a query esteja correta
     if (role === "dono" || role === "recepcionista") {
       queryText = `
                 UPDATE carrinho_agendamento SET status = $1 
@@ -1018,10 +790,7 @@ app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
 
     const result = await db.query(queryText, values);
     if (result.rowCount === 0)
-      return res.status(404).json({
-        message:
-          "Agendamento não encontrado ou você não tem permissão para atualizá-lo.",
-      });
+      return res.status(404).json({ message: "Agendamento não encontrado ou você não tem permissão para atualizá-lo." });
 
     res.status(200).json(result.rows[0]);
   } catch (error) {
@@ -1030,7 +799,6 @@ app.put("/agendamentos/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ROTA DE DELEÇÃO (DELETE) CORRIGIDA
 app.delete("/agendamentos/:id", authMiddleware, async (req, res) => {
   try {
     const { id: agendamento_id } = req.params;
@@ -1039,7 +807,6 @@ app.delete("/agendamentos/:id", authMiddleware, async (req, res) => {
     let values;
 
     if (role === "dono" || role === "recepcionista") {
-      // Dono e Recepcionista podem deletar qualquer agendamento da filial
       queryText = `
                 DELETE FROM carrinho_agendamento 
                 WHERE id = $1 AND profissional_id IN (
@@ -1050,18 +817,13 @@ app.delete("/agendamentos/:id", authMiddleware, async (req, res) => {
             `;
       values = [agendamento_id, profissional_id];
     } else {
-      // Funcionário só pode deletar o seu próprio agendamento
-      queryText =
-        "DELETE FROM carrinho_agendamento WHERE id = $1 AND profissional_id = $2";
+      queryText = "DELETE FROM carrinho_agendamento WHERE id = $1 AND profissional_id = $2";
       values = [agendamento_id, profissional_id];
     }
 
     const result = await db.query(queryText, values);
     if (result.rowCount === 0)
-      return res.status(404).json({
-        message:
-          "Agendamento não encontrado ou você não tem permissão para deletá-lo.",
-      });
+      return res.status(404).json({ message: "Agendamento não encontrado ou você não tem permissão para deletá-lo." });
 
     res.status(204).send();
   } catch (error) {
@@ -1078,18 +840,10 @@ app.get(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-      const horariosResult = await db.query(
-        "SELECT config_horarios FROM profissional WHERE id = $1",
-        [profissional_id]
-      );
-      const filialResult = await db.query(
-        "SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1",
-        [profissional_id]
-      );
+      const horariosResult = await db.query("SELECT config_horarios FROM profissional WHERE id = $1", [profissional_id]);
+      const filialResult = await db.query("SELECT f.comissao_percentual FROM filial f JOIN profissional p ON f.id = p.filial_id WHERE p.id = $1", [profissional_id]);
       if (horariosResult.rows.length === 0 || filialResult.rows.length === 0) {
-        return res
-          .status(404)
-          .json({ message: "Configurações não encontradas." });
+        return res.status(404).json({ message: "Configurações não encontradas." });
       }
       res.status(200).json({
         horarios: horariosResult.rows[0].config_horarios,
@@ -1111,27 +865,16 @@ app.put(
       const { horarios, comissao } = req.body;
 
       if (horarios) {
-        await db.query(
-          `UPDATE profissional SET config_horarios = $1 WHERE id = $2`,
-          [horarios, profissional_id]
-        );
+        await db.query(`UPDATE profissional SET config_horarios = $1 WHERE id = $2`, [horarios, profissional_id]);
       }
 
       if (comissao !== undefined) {
-        const filialResult = await db.query(
-          "SELECT filial_id FROM profissional WHERE id = $1",
-          [profissional_id]
-        );
+        const filialResult = await db.query("SELECT filial_id FROM profissional WHERE id = $1", [profissional_id]);
         const filial_id = filialResult.rows[0]?.filial_id;
         if (filial_id) {
-          await db.query(
-            `UPDATE filial SET comissao_percentual = $1 WHERE id = $2`,
-            [comissao, filial_id]
-          );
+          await db.query(`UPDATE filial SET comissao_percentual = $1 WHERE id = $2`, [comissao, filial_id]);
         } else {
-          return res
-            .status(400)
-            .json({ message: "Usuário dono não está ligado a uma filial." });
+          return res.status(400).json({ message: "Usuário dono não está ligado a uma filial." });
         }
       }
 
@@ -1205,12 +948,10 @@ app.get(
       if (!mes || !ano)
         return res.status(400).json({ message: "Mês e ano são obrigatórios." });
 
-      // 1. Busca a comissão da filial
       const comissaoQuery = `SELECT comissao_percentual FROM filial WHERE id = (SELECT filial_id FROM profissional WHERE id = $1)`;
       const comissaoResult = await db.query(comissaoQuery, [dono_id]);
       const comissao = comissaoResult.rows[0]?.comissao_percentual || 0;
 
-      // 2. Busca o faturamento bruto de cada profissional da filial
       const faturamentoQuery = `
           SELECT 
               p.id as profissional_id,
@@ -1225,13 +966,8 @@ app.get(
           GROUP BY p.id, p.nome
           ORDER BY p.nome;
       `;
-      const faturamentoResult = await db.query(faturamentoQuery, [
-        dono_id,
-        mes,
-        ano,
-      ]);
+      const faturamentoResult = await db.query(faturamentoQuery, [dono_id, mes, ano]);
 
-      // 3. Calcula o valor a receber para cada profissional
       const relatorio = faturamentoResult.rows.map((item) => {
         const faturamentoBruto = parseFloat(item.faturamento_bruto);
         const valorAReceber = faturamentoBruto * (1 - comissao / 100);
@@ -1255,34 +991,19 @@ app.post("/clientes/cadastro", async (req, res) => {
   try {
     const { nome, email, telefone, senha } = req.body;
     if (!nome || !email || !senha || !telefone) {
-      return res
-        .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+      return res.status(400).json({ message: "Todos os campos são obrigatórios." });
     }
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senha, salt);
 
-    // A coluna 'profissional_id' é opcional e não precisa ser inserida aqui
     const queryText = `INSERT INTO cliente (nome_cliente, email_contato, telefone_contato, senha_hash) VALUES ($1, $2, $3, $4) RETURNING id, nome_cliente, email_contato;`;
-
-    const result = await db.query(queryText, [
-      nome,
-      email,
-      telefone,
-      senhaHash,
-    ]);
+    const result = await db.query(queryText, [nome, email, telefone, senhaHash]);
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    // --- "ESPIÃO" ADICIONADO AQUI ---
-    // Este log irá imprimir o erro detalhado do banco de dados nos logs da Render
     console.error("ERRO DETALHADO NO CADASTRO DE CLIENTE:", error);
-
     if (error.code === "23505") {
-      // violação de chave única (email duplicado)
-      return res
-        .status(409)
-        .json({ message: "Este email já está cadastrado." });
+      return res.status(409).json({ message: "Este email já está cadastrado." });
     }
     res.status(500).json({ message: "Erro interno do servidor." });
   }
@@ -1292,13 +1013,8 @@ app.post("/clientes/login", async (req, res) => {
   try {
     const { email, senha } = req.body;
     if (!email || !senha)
-      return res
-        .status(400)
-        .json({ message: "Email e senha são obrigatórios." });
-    const result = await db.query(
-      "SELECT * FROM cliente WHERE email_contato = $1",
-      [email]
-    );
+      return res.status(400).json({ message: "Email e senha são obrigatórios." });
+    const result = await db.query("SELECT * FROM cliente WHERE email_contato = $1", [email]);
     if (result.rows.length === 0)
       return res.status(401).json({ message: "Credenciais inválidas." });
     const cliente = result.rows[0];
@@ -1314,9 +1030,7 @@ app.post("/clientes/login", async (req, res) => {
       telefone: cliente.telefone_contato,
       tipo: "cliente",
     };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.status(200).json({ token });
   } catch (error) {
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -1350,9 +1064,7 @@ app.delete(
         [agendamentoId, clienteId]
       );
       if (result.rowCount === 0)
-        return res.status(404).json({
-          message: "Agendamento não encontrado ou não pertence a você.",
-        });
+        return res.status(404).json({ message: "Agendamento não encontrado ou não pertence a você.", });
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -1360,7 +1072,6 @@ app.delete(
   }
 );
 
-// ROTA PARA LISTAR TODOS OS CLIENTES DA FILIAL
 app.get(
   "/clientes",
   authMiddleware,
@@ -1368,20 +1079,12 @@ app.get(
   async (req, res) => {
     try {
       const { id: profissional_id } = req.profissional;
-
-      // Descobre a filial do usuário logado
-      const filialResult = await db.query(
-        "SELECT filial_id FROM profissional WHERE id = $1",
-        [profissional_id]
-      );
+      const filialResult = await db.query("SELECT filial_id FROM profissional WHERE id = $1", [profissional_id]);
       const filial_id = filialResult.rows[0]?.filial_id;
       if (!filial_id) {
-        return res
-          .status(400)
-          .json({ message: "Usuário não associado a uma filial." });
+        return res.status(400).json({ message: "Usuário não associado a uma filial." });
       }
 
-      // Busca todos os clientes únicos que já tiveram um agendamento em qualquer profissional daquela filial
       const queryText = `
             SELECT DISTINCT ON (c.id) c.id, c.nome_cliente, c.email_contato, c.telefone_contato
             FROM cliente c
@@ -1409,9 +1112,7 @@ app.put(
       const { nome_cliente, email_contato, telefone_contato } = req.body;
 
       if (!nome_cliente || !email_contato || !telefone_contato) {
-        return res
-          .status(400)
-          .json({ message: "Todos os campos são obrigatórios." });
+        return res.status(400).json({ message: "Todos os campos são obrigatórios." });
       }
 
       const { id: profissional_id } = req.profissional;
@@ -1424,38 +1125,24 @@ app.put(
             )
             LIMIT 1;
         `;
-      const permissaoResult = await db.query(permissaoQuery, [
-        clienteId,
-        profissional_id,
-      ]);
+      const permissaoResult = await db.query(permissaoQuery, [clienteId, profissional_id]);
 
       if (permissaoResult.rows.length === 0) {
-        return res.status(403).json({
-          message: "Você não tem permissão para editar este cliente.",
-        });
+        return res.status(403).json({ message: "Você não tem permissão para editar este cliente." });
       }
 
-      // --- CORREÇÃO APLICADA AQUI ---
-      // Removida a coluna "atualizado_em = NOW()" que não existe na tabela 'cliente'
       const queryText = `
             UPDATE cliente 
             SET nome_cliente = $1, email_contato = $2, telefone_contato = $3
             WHERE id = $4
             RETURNING id, nome_cliente, email_contato, telefone_contato;
         `;
-      const result = await db.query(queryText, [
-        nome_cliente,
-        email_contato,
-        telefone_contato,
-        clienteId,
-      ]);
+      const result = await db.query(queryText, [nome_cliente, email_contato, telefone_contato, clienteId]);
 
       res.status(200).json(result.rows[0]);
     } catch (error) {
       if (error.code === "23505") {
-        return res
-          .status(409)
-          .json({ message: "Este email já está em uso por outro cliente." });
+        return res.status(409).json({ message: "Este email já está em uso por outro cliente." });
       }
       console.error("Erro ao atualizar cliente:", error);
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -1466,55 +1153,33 @@ app.put(
 app.post("/esqueci-senha", async (req, res) => {
   try {
     const { email, tipo } = req.body;
-    console.log(
-      `[LOG] Solicitação de reset para email: ${email}, tipo: ${tipo}`
-    );
+    console.log(`[LOG] Solicitação de reset para email: ${email}, tipo: ${tipo}`);
 
     const tabela = tipo === "profissional" ? "profissional" : "cliente";
     const colunaEmail = tipo === "profissional" ? "email" : "email_contato";
 
-    const userResult = await db.query(
-      `SELECT * FROM ${tabela} WHERE ${colunaEmail} = $1`,
-      [email]
-    );
+    const userResult = await db.query(`SELECT * FROM ${tabela} WHERE ${colunaEmail} = $1`, [email]);
 
     if (userResult.rows.length === 0) {
-      console.log(
-        `[LOG] Usuário com email ${email} não encontrado na tabela ${tabela}. Respondendo com sucesso genérico.`
-      );
       return res.status(200).json({
-        message:
-          "Se um usuário com este email existir, um link de recuperação será enviado.",
+        message: "Se um usuário com este email existir, um link de recuperação será enviado.",
       });
     }
-    console.log(`[LOG] Usuário ${email} encontrado. Gerando token de reset...`);
 
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
     const tokenExpires = new Date(Date.now() + 3600000);
 
     await db.query(
       `UPDATE ${tabela} SET reset_token = $1, reset_token_expires = $2 WHERE ${colunaEmail} = $3`,
       [hashedToken, tokenExpires, email]
     );
-    console.log(`[LOG] Token de reset salvo no banco de dados para ${email}.`);
 
     const resetUrl = `http://localhost:3000/resetar-senha/${resetToken}?tipo=${tipo}`;
-    console.log(
-      `[LOG] Preparando para enviar email para ${email} com o link: ${resetUrl}`
-    );
+    await enviarEmailReset(email, resetUrl);
 
-    await enviarEmailReset(email, resetUrl); // A chamada para o nosso email.js
-
-    console.log(
-      `[LOG] Processo de /esqueci-senha concluído com sucesso para ${email}.`
-    );
     res.status(200).json({
-      message:
-        "Se um usuário com este email existir, um link de recuperação será enviado.",
+      message: "Se um usuário com este email existir, um link de recuperação será enviado.",
     });
   } catch (error) {
     console.error("ERRO CRÍTICO NA ROTA /esqueci-senha:", error);
@@ -1522,37 +1187,26 @@ app.post("/esqueci-senha", async (req, res) => {
   }
 });
 
-// ROTA PARA EFETIVAMENTE RESETAR A SENHA
 app.post("/resetar-senha", async (req, res) => {
   try {
     const { token, tipo, senha } = req.body;
     if (!token || !tipo || !senha) {
-      return res
-        .status(400)
-        .json({ message: "Token, tipo e nova senha são obrigatórios." });
+      return res.status(400).json({ message: "Token, tipo e nova senha são obrigatórios." });
     }
 
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
     let userResult;
 
     if (tipo === "profissional") {
-      userResult = await db.query(
-        `SELECT * FROM profissional WHERE reset_token = $1 AND reset_token_expires > NOW()`,
-        [hashedToken]
-      );
+      userResult = await db.query(`SELECT * FROM profissional WHERE reset_token = $1 AND reset_token_expires > NOW()`, [hashedToken]);
     } else if (tipo === "cliente") {
-      userResult = await db.query(
-        `SELECT * FROM cliente WHERE reset_token = $1 AND reset_token_expires > NOW()`,
-        [hashedToken]
-      );
+      userResult = await db.query(`SELECT * FROM cliente WHERE reset_token = $1 AND reset_token_expires > NOW()`, [hashedToken]);
     } else {
       return res.status(400).json({ message: "Tipo de usuário inválido." });
     }
 
     if (userResult.rows.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Token de recuperação inválido ou expirado." });
+      return res.status(400).json({ message: "Token de recuperação inválido ou expirado." });
     }
     const user = userResult.rows[0];
 
@@ -1560,15 +1214,9 @@ app.post("/resetar-senha", async (req, res) => {
     const senhaHash = await bcrypt.hash(senha, salt);
 
     if (tipo === "profissional") {
-      await db.query(
-        `UPDATE profissional SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
-        [senhaHash, user.id]
-      );
+      await db.query(`UPDATE profissional SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`, [senhaHash, user.id]);
     } else {
-      await db.query(
-        `UPDATE cliente SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
-        [senhaHash, user.id]
-      );
+      await db.query(`UPDATE cliente SET senha_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`, [senhaHash, user.id]);
     }
 
     res.status(200).json({ message: "Senha atualizada com sucesso." });
@@ -1579,122 +1227,59 @@ app.post("/resetar-senha", async (req, res) => {
 });
 
 // =================================================================
-// --- ROBÔ DE LEMBRETES AUTOMÁTICOS (CRON JOB) ---
+// --- ROBÔS ---
 // =================================================================
-console.log("Agendando robô de lembretes...");
-// Agenda a tarefa para rodar a cada 30 minutos
+console.log("Agendando robôs...");
 cron.schedule("*/30 * * * *", async () => {
-  console.log(
-    `[${new Date().toLocaleString(
-      "pt-BR"
-    )}] 🤖 Robô de lembretes verificando agendamentos...`
-  );
-
+  console.log(`[${new Date().toLocaleString("pt-BR")}] 🤖 Robô de lembretes verificando agendamentos...`);
   try {
-    // Procura agendamentos que estão 'agendado', ainda não tiveram lembrete enviado,
-    // e que acontecerão entre 23 e 24 horas a partir de agora.
     const queryText = `
         SELECT ca.id, ca.data_hora_inicio, c.nome_cliente, c.telefone_contato,
-               (SELECT STRING_AGG(s.nome_servico, ', ') 
-                FROM servico s 
-                JOIN carrinho_servico cs ON s.id = cs.servico_id 
-                WHERE cs.carrinho_id = ca.id) as nome_servico
+               (SELECT STRING_AGG(s.nome_servico, ', ') FROM servico s JOIN carrinho_servico cs ON s.id = cs.servico_id WHERE cs.carrinho_id = ca.id) as nome_servico
         FROM carrinho_agendamento ca
         JOIN cliente c ON ca.cliente_id = c.id
-        WHERE 
-            ca.status = 'agendado' 
-            AND ca.lembrete_enviado = FALSE
-            AND ca.data_hora_inicio BETWEEN NOW() + interval '23 hours' AND NOW() + interval '24 hours';
+        WHERE ca.status = 'agendado' AND ca.lembrete_enviado = FALSE
+          AND ca.data_hora_inicio BETWEEN NOW() + interval '23 hours' AND NOW() + interval '24 hours';
     `;
     const result = await db.query(queryText);
     const agendamentosParaLembrar = result.rows;
 
     if (agendamentosParaLembrar.length > 0) {
-      console.log(
-        `🤖 Encontrados ${agendamentosParaLembrar.length} agendamentos para enviar lembrete.`
-      );
-
       for (const ag of agendamentosParaLembrar) {
-        const dataFormatada = new Date(ag.data_hora_inicio).toLocaleDateString(
-          "pt-BR",
-          { day: "2-digit", month: "2-digit" }
-        );
-        const horaFormatada = new Date(ag.data_hora_inicio).toLocaleTimeString(
-          "pt-BR",
-          { hour: "2-digit", minute: "2-digit" }
-        );
-
+        const dataFormatada = new Date(ag.data_hora_inicio).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        const horaFormatada = new Date(ag.data_hora_inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         const mensagem = `Olá, ${ag.nome_cliente}! Passando para lembrar do seu agendamento de "${ag.nome_servico}" amanhã, dia ${dataFormatada} às ${horaFormatada}. Esperamos por você!`;
-
-        // O número precisa estar no formato 'whatsapp:+5561999998888'
-        const telefoneParaEnvio = `whatsapp:${ag.telefone_contato.replace(
-          /\D/g,
-          ""
-        )}`;
-
-        const sucesso = await enviarLembreteWhatsApp(
-          telefoneParaEnvio,
-          mensagem
-        );
-
+        const telefoneParaEnvio = `whatsapp:${ag.telefone_contato.replace(/\D/g, "")}`;
+        
+        const sucesso = await enviarLembreteWhatsApp(telefoneParaEnvio, mensagem);
         if (sucesso) {
-          // Se o envio foi bem-sucedido, marca no banco para não enviar de novo
-          await db.query(
-            "UPDATE carrinho_agendamento SET lembrete_enviado = TRUE WHERE id = $1",
-            [ag.id]
-          );
+          await db.query("UPDATE carrinho_agendamento SET lembrete_enviado = TRUE WHERE id = $1", [ag.id]);
         }
       }
-    } else {
-      console.log("🤖 Nenhum agendamento para lembrar neste ciclo.");
     }
   } catch (error) {
     console.error("🤖 Erro ao executar o robô de lembretes:", error);
   }
 });
 
-
-// 2. NOVO: Robô de Limpeza de Contas Pendentes
-console.log("Agendando robô de limpeza de contas pendentes...");
-// Agenda a tarefa para rodar uma vez por dia, às 3 da manhã.
 cron.schedule("0 3 * * *", async () => {
-  console.log(
-    `[${new Date().toLocaleString(
-      "pt-BR"
-    )}] 🤖 Robô de limpeza verificando contas pendentes...`
-  );
   try {
     const queryText = `
             DELETE FROM filial
             WHERE id IN (
-                SELECT f.id
-                FROM filial f
+                SELECT f.id FROM filial f
                 JOIN profissional p ON f.id = p.filial_id
                 WHERE f.plano = 'pendente_pagamento'
                   AND p.role = 'dono'
                   AND p.criado_em < NOW() - INTERVAL '72 hours'
             );
         `;
-
-    const result = await db.query(queryText);
-
-    if (result.rowCount > 0) {
-      console.log(
-        `🤖 SUCESSO: ${result.rowCount} conta(s) pendente(s) foram limpas.`
-      );
-    } else {
-      console.log("🤖 Nenhuma conta pendente para limpar neste ciclo.");
-    }
+    await db.query(queryText);
   } catch (error) {
     console.error("🤖 Erro ao executar o robô de limpeza:", error);
   }
 });
 
-// =================================================================
-// --- INICIALIZAÇÃO DO SERVIDOR ---
-// =================================================================
 app.listen(port, () => {
-  console.log(
-    `🚀🚀🚀 SERVIDOR COM CORREÇÃO FINAL rodando na porta http://localhost:${port}`
-  );
+  console.log(`🚀 SERVIDOR "ACESSO TOTAL" rodando na porta http://localhost:${port}`);
 });
