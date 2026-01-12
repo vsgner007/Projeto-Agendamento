@@ -3,7 +3,6 @@ import {
   Container,
   Title,
   Text,
-  SimpleGrid,
   Card,
   Button,
   Group,
@@ -13,28 +12,29 @@ import {
   Burger,
   Drawer,
   Image,
+  Center,
+  Badge,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconCheck, IconHelp } from "@tabler/icons-react";
+import { IconCheck, IconHelp, IconStar } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
-const planos = [
-
-  {
-    id: "premium",
-    nome: "Premium",
-    preco: "R$ 49,90/mês",
-    link: "/cadastro-dono?plano=premium",
-    features: [
-      "Agenda online",
-      "Gestão de serviços e clientes",
-      "Gestão de equipe e funcionários ilimitados",
-      "Relatório financeiro e análise",
-      "Lembretes por WhatsApp",
-      "Suporte prioritário",
-    ],
-  },
-];
+// DADOS DO PLANO ÚNICO
+const planoUnico = {
+  id: "pro",
+  nome: "Acesso Total",
+  preco: "R$ 49,90/mês",
+  link: "/cadastro-dono?plano=pro", // Backend deve tratar qualquer registro como Full
+  features: [
+    "Agenda online 24h",
+    "Gestão de serviços e clientes",
+    "Equipe e funcionários ilimitados",
+    "Relatórios financeiros detalhados",
+    "Lembretes automáticos via WhatsApp",
+    "Suporte prioritário via WhatsApp",
+    "Página de agendamento personalizada",
+  ],
+};
 
 function LandingPage() {
   const [opened, { toggle, close }] = useDisclosure(false);
@@ -71,8 +71,14 @@ function LandingPage() {
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" />
         </Group>
 
-        {/* --- MENU MOBILE CORRIGIDO --- */}
-        <Drawer opened={opened} onClose={close} padding="md" size="auto" title="Navegação">
+        {/* --- MENU MOBILE --- */}
+        <Drawer
+          opened={opened}
+          onClose={close}
+          padding="md"
+          size="auto"
+          title="Navegação"
+        >
           <Stack>
             <Button
               component="a"
@@ -113,68 +119,82 @@ function LandingPage() {
               style={{ fontSize: "clamp(1rem, 2vw, 1.3rem)" }}
             >
               Organize sua equipe, gerencie seus clientes e reduza faltas com
-              lembretes automáticos. Tudo em um só lugar.
+              lembretes automáticos. Tudo o que você precisa em um único lugar.
             </Text>
           </Stack>
 
-          {/* SEÇÃO DE PLANOS */}
-          <Container my="xl" pt="xl" id="planos">
-            <Title order={2} ta="center">
-              Nossos Planos
-            </Title>
-            <Text c="dimmed" ta="center" mt="sm" mb="xl">
-              Escolha o plano que melhor se adapta ao crescimento do seu
-              negócio.
-            </Text>
+          {/* SEÇÃO DE PREÇO ÚNICO */}
+          <Container my="xl" pt="lg" id="planos">
+            <Stack align="center" mb="xl">
+              <Title order={2} ta="center">
+                Simples e Completo
+              </Title>
+              <Text c="dimmed" ta="center">
+                Sem taxas escondidas. Sem limites de funcionalidades.
+              </Text>
+            </Stack>
 
-            {/* GRID RESPONSIVO */}
-            <SimpleGrid
-              cols={{ base: 1, sm: 2, md: 3 }}
-              spacing={{ base: "lg", sm: "xl" }}
-            >
-              {planos.map((plano) => (
-                <Card
-                  key={plano.id}
-                  shadow="sm"
-                  padding="lg"
-                  radius="md"
-                  withBorder
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    height: "100%",
-                  }}
-                >
-                  <Title order={3} ta="center">
-                    {plano.nome}
-                  </Title>
-                  <Text size="xl" fw={700} my="md" ta="center">
-                    {plano.preco}
-                  </Text>
-                  <Stack mt="md" gap="sm" style={{ flex: 1 }}>
-                    {plano.features.map((feature) => (
-                      <Group key={feature} gap="sm" wrap="nowrap">
-                        <ThemeIcon color="green" size={22} radius="xl">
-                          <IconCheck size={14} />
-                        </ThemeIcon>
-                        <Text size="sm">{feature}</Text>
-                      </Group>
-                    ))}
-                  </Stack>
-                  <Button
-                    component={Link}
-                    to={plano.link}
-                    fullWidth
-                    mt="xl"
-                    radius="md"
-                    size="md"
+            {/* CARD ÚNICO CENTRALIZADO */}
+            <Center>
+              <Card
+                shadow="md"
+                padding="xl"
+                radius="md"
+                withBorder
+                w="100%"
+                maw={450} // Largura máxima para não ficar gigante
+                style={{
+                  borderTop: "4px solid var(--mantine-color-blue-6)", // Destaque visual no topo
+                }}
+              >
+                <Group justify="center" mb="xs">
+                  <Badge
+                    variant="gradient"
+                    gradient={{ from: "blue", to: "cyan" }}
+                    size="lg"
                   >
-                    Assinar Agora
-                  </Button>
-                </Card>
-              ))}
-            </SimpleGrid>
+                    TUDO INCLUÍDO
+                  </Badge>
+                </Group>
+
+                <Title order={3} ta="center" mt="sm">
+                  {planoUnico.nome}
+                </Title>
+                
+                <Text size="xl" fw={700} my="md" ta="center" fz={32}>
+                  {planoUnico.preco}
+                </Text>
+
+                <Stack mt="xl" gap="md">
+                  {planoUnico.features.map((feature) => (
+                    <Group key={feature} gap="sm" wrap="nowrap">
+                      <ThemeIcon color="green" size={24} radius="xl">
+                        <IconCheck size={16} />
+                      </ThemeIcon>
+                      <Text size="md">{feature}</Text>
+                    </Group>
+                  ))}
+                </Stack>
+
+                <Button
+                  component={Link}
+                  to={planoUnico.link}
+                  fullWidth
+                  mt={30}
+                  radius="md"
+                  size="lg"
+                  variant="gradient"
+                  gradient={{ from: "blue", to: "cyan" }}
+                >
+                  Começar Agora
+                </Button>
+                
+                <Group justify="center" mt="md" gap={5}>
+                   <IconStar size={14} color="gray" />
+                   <Text size="xs" c="dimmed">Cancele quando quiser</Text>
+                </Group>
+              </Card>
+            </Center>
           </Container>
         </Container>
       </AppShell.Main>
